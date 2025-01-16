@@ -1,0 +1,198 @@
+/*
+ * XNAT Distributed Events Plugin: build.gradle
+ * Copyright 2025, XNAT Works, Inc.
+ * Developer: Rick Herrick
+ */
+ 
+buildscript {
+    ext {
+        vXnat = "1.9.0"
+    }
+}
+
+plugins {
+    id "eclipse"
+    id "idea"
+    id "java-library"
+    id "maven-publish"
+    id "com.palantir.git-version" version "3.1.0"
+    id "io.franzbecker.gradle-lombok" version "5.0.0"
+    id "org.nrg.xnat.build.xnat-data-builder" version "${vXnat}"
+}
+
+group = "io.xnatworks.events.distributed"
+version = "1.0.0-SNAPSHOT"
+description = "XNAT Distributed Events Plugin"
+
+repositories {
+    mavenLocal()
+    maven { url = "https://nrgxnat.jfrog.io/nrgxnat/libs-release" }
+    maven { url = "https://nrgxnat.jfrog.io/nrgxnat/libs-snapshot" }
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+    withSourcesJar()
+    withJavadocJar()
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir "build/xnat-generated/src/main/java"
+        }
+        resources {
+            srcDir "build/xnat-generated/src/main/resources"
+        }
+    }
+}
+
+configurations {
+    implementation.extendsFrom(implementAndInclude)
+}
+
+dependencies {
+    api platform("org.nrg:parent:${vXnat}")
+
+    implementation platform("org.nrg:parent:${vXnat}")
+
+    implementation("org.nrg.xnat:web") {
+        exclude group: "*"
+    }
+    implementation("org.nrg.xnat:xnat-data-models") {
+        exclude group: "*"
+    }
+    implementation("org.nrg.xdat:core") {
+        exclude group: "*"
+    }
+    implementation("org.nrg:framework") {
+        exclude group: "*"
+    }
+    implementation "org.springframework:spring-web"
+    implementation "org.springframework:spring-jms"
+    implementation "io.springfox:springfox-swagger2"
+    implementation "org.apache.activemq:activemq-client"
+    implementation "org.apache.commons:commons-lang3"
+    implementation "org.slf4j:slf4j-api"
+    implementation "ch.qos.logback:logback-classic"
+}
+
+// Pulls in the Jenkins BUILD_NUMBER environment variable if available.
+def buildDate = new Date()
+def buildNumber = System.getenv().BUILD_NUMBER?.toInteger() ?: "Manual"
+def isDirty, branchName, gitHash, gitHashFull, commitDistance, lastTag, isCleanTag
+
+try {
+    def gitDetails = versionDetails()
+    isDirty = gitVersion().endsWith ".dirty"
+    branchName = gitDetails.branchName ?: "Unknown"
+    gitHash = gitDetails.gitHash
+    gitHashFull = gitDetails.gitHashFull
+    commitDistance = gitDetails.commitDistance
+    lastTag = gitDetails.lastTag
+    isCleanTag = gitDetails.isCleanTag
+} catch (IllegalArgumentException ignored) {
+    logger.info "Got an error trying to read VCS metadata from git. It's possible this project is not under VCS control. Using placeholder values for manifest entries."
+    isDirty = true
+    branchName = "Unknown"
+    gitHash = "None"
+    gitHashFull = "None"
+    commitDistance = 0
+    lastTag = "None"
+    isCleanTag = false
+}
+
+compileJava {
+    dependsOn xnatDataBuilder
+    options.fork = false
+}
+
+jar {
+    doLast {
+        if (!gradle.taskGraph.hasTask(":xnatPluginJar")) {
+            logger.warn "WARNING: You should generally run xnatPluginJar instead of jar task for this plugin"
+        }
+    }
+}
+
+tasks.register("xnatPluginJar", Jar) {
+    zip64 = true
+    archiveClassifier = "xpl"
+    from {
+        configurations.implementAndInclude.collect { it.isDirectory() ? it : zipTree(it) }
+    } {
+        exclude "META-INF/*.SF"
+        exclude "META-INF/*.DSA"
+        exclude "META-INF/*.RSA"
+    }
+    with jar
+}
+
+tasks.withType(Jar).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes "Application-Name": project.description,
+                "Build-Date": buildDate,
+                "Build-Number": buildNumber,
+                "Implementation-Version": project.version,
+                "Implementation-Sha": gitHash,
+                "Implementation-Sha-Full": gitHashFull,
+                "Implementation-Commit": commitDistance,
+                "Implementation-LastTag": lastTag,
+                "Implementation-Branch": branchName,
+                "Implementation-CleanTag": isCleanTag,
+                "Implementation-Dirty": isDirty
+    }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+
+            versionMapping {
+                usage("java-api") {
+                    fromResolutionOf("runtimeClasspath")
+                }
+                usage("java-runtime") {
+                    fromResolutionResult()
+                }
+            }
+            pom {
+                name = "Radiologics MFA Plugin"
+                description = "Plugin to enable Multi Factor Authentication (MFA)"
+                developers {
+                    developer {
+                        id = "James_Ransford"
+                        name = "James Ransford"
+                        email = "ransfordj@radiologics.com"
+                    }
+                    developer {
+                        id = "mohana_radiologics"
+                        name = "Mohana Ramaratnam"
+                        email = "mohana@radiologics.com"
+                    }
+                    developer {
+                        id = "rickherrick_fw"
+                        name = "Rick Herrick"
+                        email = "rickherrick@flywheel.io"
+                    }
+                }
+                scm {
+                    connection = "scm:git:git://bitbucket.org/radiologics/mfa_plugin.git"
+                    developerConnection = "scm:git:ssh://bitbucket.org/radiologics/mfa.git"
+                    url = "https://bitbucket.org/radiologics/mfa_plugin"
+                }
+            }
+        }
+    }
+    repositories { 
+        maven {
+            url = "https://nrgxnat.jfrog.io/nrgxnat/libs-${project.version.endsWith("-SNAPSHOT") ? "snapshot" : "release"}"
+        }
+    }
+}
+
+
