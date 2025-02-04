@@ -5,4 +5,3 @@ The XNAT distributed events plugin enables XNAT to propagate events across multi
 ## Version 1.0.0
 
 Initial open source release. Released ?.
-

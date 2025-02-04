@@ -1,15 +1,18 @@
 package io.xnatworks.events.distributed.publisher;
 
 import io.xnatworks.events.distributed.DistEventsPlugin;
+import io.xnatworks.events.distributed.components.IsMultiNodeDeployment;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.nrg.xft.utils.DateUtils;
 import org.nrg.xnat.services.XnatAppInfo;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
+@Conditional(IsMultiNodeDeployment.class)
 @Slf4j
 public class Publisher {
     private final JmsTemplate template;
@@ -27,7 +30,7 @@ public class Publisher {
 
     public EventMessage sendMessage(final String message) {
         final EventMessage eventMessage = EventMessage.builder().originatingNodeId(nodeId).timestamp(DateUtils.getMsTimestamp()).message(message).build();
-        template.convertAndSend(DistEventsPlugin.TOPIC_NAME, eventMessage);
+        template.convertAndSend(DistEventsPlugin.DIST_TEST_TOPIC, eventMessage);
         log.debug("{}: sent message with timestamp '{}' and text: '{}'", nodeId, eventMessage.getTimestamp(), eventMessage.getMessage());
         return eventMessage;
     }

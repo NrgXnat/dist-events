@@ -14,6 +14,8 @@ import org.nrg.xapi.rest.XapiRequestMapping;
 import org.nrg.xdat.security.helpers.AccessLevel;
 import org.nrg.xdat.security.services.RoleHolder;
 import org.nrg.xdat.security.services.UserManagementServiceI;
+import org.nrg.xft.utils.DateUtils;
+import org.nrg.xnat.services.XnatAppInfo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,10 +29,12 @@ import static org.springframework.web.bind.annotation.RequestMethod.POST;
 @Slf4j
 public class DistEventsApi extends AbstractXapiRestController {
     private final Publisher publisher;
+    private final String    nodeId;
 
     @Autowired
-    public DistEventsApi(final UserManagementServiceI userManagementService, final RoleHolder roleHolder, final Publisher publisher) {
+    public DistEventsApi(final UserManagementServiceI userManagementService, final RoleHolder roleHolder, final XnatAppInfo appInfo, final @Autowired(required = false) Publisher publisher) {
         super(userManagementService, roleHolder);
+        this.nodeId    = appInfo.getNode().getNodeId();
         this.publisher = publisher;
     }
 
@@ -40,6 +44,9 @@ public class DistEventsApi extends AbstractXapiRestController {
                    @ApiResponse(code = 500, message = "An unexpected or unknown error occurred.")})
     @XapiRequestMapping(produces = APPLICATION_JSON_VALUE, method = POST, restrictTo = AccessLevel.Admin)
     public EventMessage createEventMessage(@RequestBody(required = false) final String message) {
+        if (publisher == null) {
+            return EventMessage.builder().originatingNodeId(nodeId).timestamp(DateUtils.getMsTimestamp()).message("No publisher available to send message.").build();
+        }
         return StringUtils.isBlank(message) ? publisher.sendMessage() : publisher.sendMessage(message);
     }
 }
