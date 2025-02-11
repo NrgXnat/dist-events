@@ -22,7 +22,7 @@ public class Subscriber {
         this.nodeId = appInfo.getNode().getNodeId();
     }
 
-    @JmsListener(destination = DistEventsPlugin.DIST_TEST_TOPIC)
+    @JmsListener(destination = DistEventsPlugin.DIST_TEST_TOPIC, containerFactory = "jmsTopicListenerContainerFactory")
     public void receive(final EventMessage message) {
         if (StringUtils.equals(nodeId, message.getOriginatingNodeId())) {
             log.info("Received message from this node so basically ignoring it: [{}] {}", message.getTimestamp(), message.getMessage());

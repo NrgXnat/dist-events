@@ -26,7 +26,7 @@ public class MultiNodeXftUpdateListener {
         this.nodeId   = appInfo.getNode().getNodeId();
     }
 
-    @JmsListener(destination = DistEventsPlugin.DIST_EVENTS_TOPIC)
+    @JmsListener(destination = DistEventsPlugin.DIST_EVENTS_TOPIC, containerFactory = "jmsTopicListenerContainerFactory")
     public void receive(final MultiNodeXftUpdateMessage message) {
         if (StringUtils.equals(nodeId, message.getOriginatingNodeId())) {
             log.info("Received message from this node so basically ignoring it: [{}] action '{}', XSI type '{}', ID(s) '{}'", message.getTimestamp(), message.getAction(), message.getXsiType(), message.getIds());
@@ -37,8 +37,12 @@ public class MultiNodeXftUpdateListener {
         final XftItemEventI event = message.toXftItemEvent();
         handlers.stream()
                 .filter(handler -> {
+                    if (StringUtils.equals("MultiNodeXftUpdateHandlerMethod", handler.getName())) {
+                        log.debug("Skipping MultiNodeXftUpdateHandlerMethod handler for event {}", event);
+                        return false;
+                    }
                     final boolean matches = handler.matches(event);
-                    log.debug("Checking handler {} for event {} (matches: {})", handler.getName(), event, matches);
+                    log.debug("Handler {} for event {} {} the event criteria", handler.getName(), event, matches ? "matches" : "does not match");
                     return matches;
                 })
                 .forEach(handler -> {

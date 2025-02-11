@@ -12,6 +12,8 @@ import java.util.List;
 @SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class MultiNodeXftUpdateMessage extends AbstractEventMessage {
+    private static final long serialVersionUID = 3847870768722635335L;
+
     private final String       action;
     private final String       xsiType;
     private final List<String> ids;

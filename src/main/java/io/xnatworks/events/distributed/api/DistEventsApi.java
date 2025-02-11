@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
+import static org.springframework.web.bind.annotation.RequestMethod.GET;
 import static org.springframework.web.bind.annotation.RequestMethod.POST;
 
 @Api("XNAT Distributed Events API")
@@ -28,14 +29,16 @@ import static org.springframework.web.bind.annotation.RequestMethod.POST;
 @RequestMapping(value = "/dist-events")
 @Slf4j
 public class DistEventsApi extends AbstractXapiRestController {
-    private final Publisher publisher;
     private final String    nodeId;
+    private final boolean   isPrimaryNode;
+    private final Publisher publisher;
 
     @Autowired
     public DistEventsApi(final UserManagementServiceI userManagementService, final RoleHolder roleHolder, final XnatAppInfo appInfo, final @Autowired(required = false) Publisher publisher) {
         super(userManagementService, roleHolder);
-        this.nodeId    = appInfo.getNode().getNodeId();
-        this.publisher = publisher;
+        this.nodeId        = appInfo.getNode().getNodeId();
+        this.isPrimaryNode = appInfo.isPrimaryNode();
+        this.publisher     = publisher;
     }
 
     @ApiOperation(value = "Creates a new \"event\" message and puts it on the topic.", notes = "Returns the newly created message for inspection.", response = EventMessage.class)
@@ -48,5 +51,15 @@ public class DistEventsApi extends AbstractXapiRestController {
             return EventMessage.builder().originatingNodeId(nodeId).timestamp(DateUtils.getMsTimestamp()).message("No publisher available to send message.").build();
         }
         return StringUtils.isBlank(message) ? publisher.sendMessage() : publisher.sendMessage(message);
+    }
+
+    @ApiOperation(value = "Returns whether this system is the primary node.", response = Boolean.class)
+    @ApiResponses({@ApiResponse(code = 200, message = "Site configuration properties successfully retrieved."),
+                   @ApiResponse(code = 401, message = "Must be authenticated to access the XNAT REST API."),
+                   @ApiResponse(code = 403, message = "Not authorized to set site configuration properties."),
+                   @ApiResponse(code = 500, message = "Unexpected error")})
+    @XapiRequestMapping(value = "is-primary", produces = APPLICATION_JSON_VALUE, method = GET)
+    public boolean isPrimaryNode() {
+        return isPrimaryNode;
     }
 }
