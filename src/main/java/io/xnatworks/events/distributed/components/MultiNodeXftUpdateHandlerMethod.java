@@ -17,7 +17,6 @@ import org.nrg.xft.exception.XFTInitException;
 import org.nrg.xft.utils.DateUtils;
 import org.nrg.xnat.services.XnatAppInfo;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Conditional;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
@@ -41,7 +40,6 @@ import static org.nrg.xdat.security.helpers.Roles.OPERATION_DELETE_ROLES;
 import static org.nrg.xdat.security.helpers.Roles.OPERATION_MODIFIED_ROLES;
 
 @Component
-@Conditional(IsMultiNodeDeployment.class)
 @Slf4j
 public class MultiNodeXftUpdateHandlerMethod extends AbstractXftItemEventHandlerMethod {
     public static final  Predicate<XftItemEventI>   PREDICATE_ROLES_CHANGED = event -> event.getProperties().containsKey(OPERATION) && StringUtils.equalsAny(event.getProperties().get(OPERATION).toString(), ADDED_ROLES, DELETED_ROLES, OPERATION_ADD_ROLE, OPERATION_ADD_ROLES, OPERATION_DELETE_ROLE, OPERATION_DELETE_ROLES, OPERATION_MODIFIED_ROLES);

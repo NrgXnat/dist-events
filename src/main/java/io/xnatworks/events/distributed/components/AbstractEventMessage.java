@@ -1,10 +1,13 @@
 package io.xnatworks.events.distributed.components;
 
+import io.swagger.annotations.ApiModel;
+import io.xnatworks.events.distributed.publisher.EventMessage;
 import lombok.Data;
 import lombok.experimental.SuperBuilder;
 
 import java.io.Serializable;
 
+@ApiModel(description = "Provides the basic functionality for a distributed event message.", subTypes = {EventMessage.class, MultiNodeXftUpdateMessage.class})
 @Data
 @SuperBuilder
 public class AbstractEventMessage implements Serializable {

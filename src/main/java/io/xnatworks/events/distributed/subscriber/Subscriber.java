@@ -1,18 +1,15 @@
 package io.xnatworks.events.distributed.subscriber;
 
 import io.xnatworks.events.distributed.DistEventsPlugin;
-import io.xnatworks.events.distributed.components.IsMultiNodeDeployment;
 import io.xnatworks.events.distributed.publisher.EventMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.nrg.xnat.services.XnatAppInfo;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Conditional;
 import org.springframework.jms.annotation.JmsListener;
 import org.springframework.stereotype.Component;
 
 @Component
-@Conditional(IsMultiNodeDeployment.class)
 @Slf4j
 public class Subscriber {
     private final String nodeId;

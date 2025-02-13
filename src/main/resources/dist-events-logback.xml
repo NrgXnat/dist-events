@@ -11,7 +11,7 @@
             <fileNamePattern>${xnat.home}/logs/dist-events.log.%d{yyyy-MM-dd}</fileNamePattern>
         </rollingPolicy>
   </appender>
-  <logger name="io.xnatworks.events.distributed" additivity="false" level="DEBUG">
+  <logger name="io.xnatworks.events.distributed" additivity="false" level="INFO">
      <appender-ref ref="dist_events"/>
  </logger>
 </configuration>

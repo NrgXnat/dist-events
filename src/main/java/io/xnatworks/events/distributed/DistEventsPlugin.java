@@ -9,13 +9,11 @@
 
 package io.xnatworks.events.distributed;
 
-import io.xnatworks.events.distributed.components.IsMultiNodeDeployment;
 import lombok.extern.slf4j.Slf4j;
 import org.nrg.framework.annotations.XnatPlugin;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.Conditional;
 import org.springframework.jms.config.DefaultJmsListenerContainerFactory;
 import org.springframework.util.ErrorHandler;
 
@@ -52,13 +50,11 @@ public class DistEventsPlugin {
     }
 
     @Bean
-    @Conditional(IsMultiNodeDeployment.class)
     public Topic distEventsTopic() throws JMSException {
         return connectionFactory.createConnection().createSession(false, Session.AUTO_ACKNOWLEDGE).createTopic(DIST_EVENTS_TOPIC);
     }
 
     @Bean
-    @Conditional(IsMultiNodeDeployment.class)
     public Topic testTopic() throws JMSException {
         return connectionFactory.createConnection().createSession(false, Session.AUTO_ACKNOWLEDGE).createTopic(DIST_TEST_TOPIC);
     }

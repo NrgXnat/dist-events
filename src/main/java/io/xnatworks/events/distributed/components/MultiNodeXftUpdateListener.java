@@ -7,14 +7,12 @@ import org.nrg.xft.event.XftItemEventI;
 import org.nrg.xft.event.methods.XftItemEventHandlerMethod;
 import org.nrg.xnat.services.XnatAppInfo;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Conditional;
 import org.springframework.jms.annotation.JmsListener;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 @Component
-@Conditional(IsMultiNodeDeployment.class)
 @Slf4j
 public class MultiNodeXftUpdateListener {
     private final List<XftItemEventHandlerMethod> handlers;
