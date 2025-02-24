@@ -3,6 +3,10 @@ package io.xnatworks.events.distributed.components;
 import io.xnatworks.events.distributed.DistEventsPlugin;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.nrg.framework.generics.GenericUtils;
+import org.nrg.xdat.om.XdatUser;
+import org.nrg.xdat.om.XdatUsergroup;
+import org.nrg.xdat.services.cache.GroupsAndPermissionsCache;
 import org.nrg.xft.event.XftItemEventI;
 import org.nrg.xft.event.methods.XftItemEventHandlerMethod;
 import org.nrg.xnat.services.XnatAppInfo;
@@ -11,15 +15,18 @@ import org.springframework.jms.annotation.JmsListener;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Component
 @Slf4j
 public class MultiNodeXftUpdateListener {
+    private final GroupsAndPermissionsCache       cache;
     private final List<XftItemEventHandlerMethod> handlers;
     private final String                          nodeId;
 
     @Autowired
-    public MultiNodeXftUpdateListener(final List<XftItemEventHandlerMethod> handlers, final XnatAppInfo appInfo) {
+    public MultiNodeXftUpdateListener(final GroupsAndPermissionsCache cache, final List<XftItemEventHandlerMethod> handlers, final XnatAppInfo appInfo) {
+        this.cache    = cache;
         this.handlers = handlers;
         this.nodeId   = appInfo.getNode().getNodeId();
     }
@@ -47,5 +54,17 @@ public class MultiNodeXftUpdateListener {
                     log.debug("Calling matching handler {} for event {}", handler.getName(), event);
                     handler.handleEvent(event);
                 });
+        switch (event.getXsiType()) {
+            case XdatUser.SCHEMA_ELEMENT_NAME:
+                event.getIds().forEach(cache::clearUserCache);
+                break;
+
+            case XdatUsergroup.SCHEMA_ELEMENT_NAME:
+                GenericUtils.convertToTypedIterable((Iterable<?>) event.getProperties().get("users"), String.class, Collectors.toSet()).forEach(cache::clearUserCache);
+                break;
+
+            default:
+                log.debug("No cache clearing required for event {}", event);
+        }
     }
 }

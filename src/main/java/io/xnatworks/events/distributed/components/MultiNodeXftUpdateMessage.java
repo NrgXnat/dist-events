@@ -5,10 +5,13 @@ import io.swagger.annotations.ApiModelProperty;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;
+import org.apache.commons.lang3.ObjectUtils;
 import org.nrg.xft.event.XftItemEvent;
 import org.nrg.xft.event.XftItemEventI;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @ApiModel(description = "Supports propagating internal XFT item events as distributed event messages.", parent = AbstractEventMessage.class)
 @Data
@@ -26,7 +29,11 @@ public class MultiNodeXftUpdateMessage extends AbstractEventMessage {
     @ApiModelProperty("The ID(s) of the affected item(s).")
     private final List<String> ids;
 
+    @ApiModelProperty("The properties of the event.")
+    private final Map<String, ?> properties;
+
     public XftItemEventI toXftItemEvent() {
-        return ids.size() == 1 ? new XftItemEvent(xsiType, ids.get(0), action) : new XftItemEvent(xsiType, ids, action);
+        return ids.size() == 1 ? XftItemEvent.builder().xsiType(xsiType).id(ids.get(0)).action(action).properties(ObjectUtils.defaultIfNull(properties, Collections.emptyMap())).build()
+                               : XftItemEvent.builder().xsiType(xsiType).ids(ids).action(action).properties(ObjectUtils.defaultIfNull(properties, Collections.emptyMap())).build();
     }
 }

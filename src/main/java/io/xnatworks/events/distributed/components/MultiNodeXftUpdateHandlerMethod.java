@@ -3,6 +3,7 @@ package io.xnatworks.events.distributed.components;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.nrg.xdat.om.XdatUser;
+import org.nrg.xdat.om.XdatUsergroup;
 import org.nrg.xdat.om.XnatExperimentdata;
 import org.nrg.xdat.om.XnatProjectdata;
 import org.nrg.xdat.om.XnatSubjectdata;
@@ -26,10 +27,13 @@ import javax.jms.Topic;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import static org.nrg.xdat.security.helpers.Groups.OPERATION_ADD_USERS;
+import static org.nrg.xdat.security.helpers.Groups.OPERATION_REMOVE_USERS;
 import static org.nrg.xft.event.XftItemEventI.OPERATION;
 import static org.nrg.xdat.security.helpers.Roles.ADDED_ROLES;
 import static org.nrg.xdat.security.helpers.Roles.DELETED_ROLES;
@@ -43,10 +47,12 @@ import static org.nrg.xdat.security.helpers.Roles.OPERATION_MODIFIED_ROLES;
 @Slf4j
 public class MultiNodeXftUpdateHandlerMethod extends AbstractXftItemEventHandlerMethod {
     public static final  Predicate<XftItemEventI>   PREDICATE_ROLES_CHANGED = event -> event.getProperties().containsKey(OPERATION) && StringUtils.equalsAny(event.getProperties().get(OPERATION).toString(), ADDED_ROLES, DELETED_ROLES, OPERATION_ADD_ROLE, OPERATION_ADD_ROLES, OPERATION_DELETE_ROLE, OPERATION_DELETE_ROLES, OPERATION_MODIFIED_ROLES);
+    public static final  Predicate<XftItemEventI>   PREDICATE_GROUP_CHANGED = event -> event.getProperties().containsKey(OPERATION) && StringUtils.equalsAny(event.getProperties().get(OPERATION).toString(), OPERATION_ADD_USERS, OPERATION_REMOVE_USERS);
     private static final List<XftItemEventCriteria> CRITERIA                = Arrays.asList(XftItemEventCriteria.builder().xsiType(XnatProjectdata.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.DELETE).build(),
                                                                                             XftItemEventCriteria.builder().xsiType(XnatSubjectdata.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.DELETE, XftItemEvent.MOVE, XftItemEvent.SHARE).build(),
                                                                                             XftItemEventCriteria.builder().xsiType(XnatExperimentdata.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.DELETE, XftItemEvent.MOVE, XftItemEvent.SHARE).build(),
-                                                                                            XftItemEventCriteria.builder().xsiType(XdatUser.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.UPDATE).predicate(PREDICATE_ROLES_CHANGED).build());
+                                                                                            XftItemEventCriteria.builder().xsiType(XdatUser.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.UPDATE).predicate(PREDICATE_ROLES_CHANGED).build(),
+                                                                                            XftItemEventCriteria.builder().xsiType(XdatUsergroup.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.UPDATE).predicate(PREDICATE_GROUP_CHANGED).build());
 
     private final String      nodeId;
     private final JmsTemplate template;
@@ -64,9 +70,10 @@ public class MultiNodeXftUpdateHandlerMethod extends AbstractXftItemEventHandler
 
     @Override
     protected boolean handleEventImpl(final XftItemEventI event) {
-        final String       action  = event.getAction();
-        final String       xsiType = event.getXsiType();
-        final List<String> ids     = getIds(event);
+        final String         action     = event.getAction();
+        final String         xsiType    = event.getXsiType();
+        final List<String>   ids        = getIds(event);
+        final Map<String, ?> properties = event.getProperties();
 
         log.debug("Handling event action '{}', xsiType '{}' for ID(s) '{}' on node {}", action, xsiType, ids, nodeId);
 
@@ -77,6 +84,7 @@ public class MultiNodeXftUpdateHandlerMethod extends AbstractXftItemEventHandler
                                                                           .action(action)
                                                                           .xsiType(xsiType)
                                                                           .ids(ids)
+                                                                          .properties(properties)
                                                                           .build());
         log.debug("{}: sent message with timestamp '{}', action '{}', xsiType '{}' for ID(s) '{}'", nodeId, timestamp, action, xsiType, ids);
         return true;
