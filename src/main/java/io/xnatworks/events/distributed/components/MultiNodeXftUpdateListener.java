@@ -60,7 +60,7 @@ public class MultiNodeXftUpdateListener {
                 break;
 
             case XdatUsergroup.SCHEMA_ELEMENT_NAME:
-                GenericUtils.convertToTypedIterable((Iterable<?>) event.getProperties().get("users"), String.class, Collectors.toSet()).forEach(cache::clearUserCache);
+                GenericUtils.convertToTypedList((Iterable<?>) event.getProperties().get("users"), String.class).stream().distinct().forEach(cache::clearUserCache);
                 break;
 
             default:

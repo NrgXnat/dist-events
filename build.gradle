@@ -6,7 +6,7 @@
  
 buildscript {
     ext {
-        vXnat = "1.9.0"
+        vXnat = "1.8.4"
     }
 }
 
