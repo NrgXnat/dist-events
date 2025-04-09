@@ -17,10 +17,11 @@ plugins {
     id "maven-publish"
     id "com.palantir.git-version" version "3.1.0"
     id "io.franzbecker.gradle-lombok" version "5.0.0"
+    id "net.linguica.maven-settings" version "0.5"
     id "org.nrg.xnat.build.xnat-data-builder" version "${vXnat}"
 }
 
-group = "io.xnatworks.events.distributed"
+group = "org.nrg.xnatx.plugins"
 version = "1.0.0-SNAPSHOT"
 description = "XNAT Distributed Events Plugin"
 
@@ -178,7 +179,7 @@ publishing {
                     developer {
                         id = "rickherrick_fw"
                         name = "Rick Herrick"
-                        email = "rickherrick@flywheel.io"
+                        email = "rick@xnatworks.io"
                     }
                 }
                 scm {
@@ -192,6 +193,8 @@ publishing {
     repositories { 
         maven {
             url = "https://nrgxnat.jfrog.io/nrgxnat/libs-${project.version.endsWith("-SNAPSHOT") ? "snapshot" : "release"}"
+            // The value for name must match <id> in ~/.m2/settings.xml
+            name = "XNAT_Artifactory"
         }
     }
 }
