@@ -152,7 +152,11 @@ tasks.withType(Jar).configureEach {
 publishing {
     publications {
         mavenJava(MavenPublication) {
-            from components.java
+            artifacts {
+                artifact xnatPluginJar
+                artifact sourcesJar
+                artifact javadocJar
+            }
 
             versionMapping {
                 usage("java-api") {
