@@ -20,7 +20,7 @@ plugins {
     id "org.nrg.xnat.build.xnat-data-builder" version "${vXnat}"
 }
 
-group = "io.xnatworks.events.distributed"
+group = "org.nrg.xnatx.plugins"
 version = "1.0.0-SNAPSHOT"
 description = "XNAT Distributed Events Plugin"
 
