@@ -1,5 +1,7 @@
-package io.xnatworks.events.distributed.components;
+package io.xnatworks.events.distributed.components.xft;
 
+import io.xnatworks.events.distributed.components.DistEventsMessagePostProcessor;
+import io.xnatworks.events.distributed.components.JmsTopicTemplate;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.nrg.xdat.om.XdatUser;
@@ -46,13 +48,16 @@ import static org.nrg.xdat.security.helpers.Roles.OPERATION_MODIFIED_ROLES;
 @Component
 @Slf4j
 public class MultiNodeXftUpdateHandlerMethod extends AbstractXftItemEventHandlerMethod {
-    public static final  Predicate<XftItemEventI>   PREDICATE_ROLES_CHANGED = event -> event.getProperties().containsKey(OPERATION) && StringUtils.equalsAny(event.getProperties().get(OPERATION).toString(), ADDED_ROLES, DELETED_ROLES, OPERATION_ADD_ROLE, OPERATION_ADD_ROLES, OPERATION_DELETE_ROLE, OPERATION_DELETE_ROLES, OPERATION_MODIFIED_ROLES);
-    public static final  Predicate<XftItemEventI>   PREDICATE_GROUP_CHANGED = event -> event.getProperties().containsKey(OPERATION) && StringUtils.equalsAny(event.getProperties().get(OPERATION).toString(), OPERATION_ADD_USERS, OPERATION_REMOVE_USERS);
-    private static final List<XftItemEventCriteria> CRITERIA                = Arrays.asList(XftItemEventCriteria.builder().xsiType(XnatProjectdata.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.DELETE).build(),
-                                                                                            XftItemEventCriteria.builder().xsiType(XnatSubjectdata.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.DELETE, XftItemEvent.MOVE, XftItemEvent.SHARE).build(),
-                                                                                            XftItemEventCriteria.builder().xsiType(XnatExperimentdata.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.DELETE, XftItemEvent.MOVE, XftItemEvent.SHARE).build(),
-                                                                                            XftItemEventCriteria.builder().xsiType(XdatUser.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.UPDATE).predicate(PREDICATE_ROLES_CHANGED).build(),
-                                                                                            XftItemEventCriteria.builder().xsiType(XdatUsergroup.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.UPDATE).predicate(PREDICATE_GROUP_CHANGED).build());
+    public static final Predicate<XftItemEventI> PREDICATE_ROLES_CHANGED = event -> event.getProperties().containsKey(OPERATION) && StringUtils.equalsAny(event.getProperties().get(OPERATION).toString(), ADDED_ROLES, DELETED_ROLES, OPERATION_ADD_ROLE, OPERATION_ADD_ROLES, OPERATION_DELETE_ROLE, OPERATION_DELETE_ROLES, OPERATION_MODIFIED_ROLES);
+    public static final Predicate<XftItemEventI> PREDICATE_GROUP_CHANGED = event -> event.getProperties().containsKey(OPERATION) && StringUtils.equalsAny(event.getProperties().get(OPERATION).toString(), OPERATION_ADD_USERS, OPERATION_REMOVE_USERS);
+
+    private static final DistEventsMessagePostProcessor POST_PROCESSOR = new DistEventsMessagePostProcessor(MultiNodeXftUpdateMessage.class);
+
+    private static final List<XftItemEventCriteria> CRITERIA = Arrays.asList(XftItemEventCriteria.builder().xsiType(XnatProjectdata.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.DELETE).build(),
+                                                                             XftItemEventCriteria.builder().xsiType(XnatSubjectdata.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.DELETE, XftItemEvent.MOVE, XftItemEvent.SHARE).build(),
+                                                                             XftItemEventCriteria.builder().xsiType(XnatExperimentdata.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.DELETE, XftItemEvent.MOVE, XftItemEvent.SHARE).build(),
+                                                                             XftItemEventCriteria.builder().xsiType(XdatUser.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.UPDATE).predicate(PREDICATE_ROLES_CHANGED).build(),
+                                                                             XftItemEventCriteria.builder().xsiType(XdatUsergroup.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.UPDATE).predicate(PREDICATE_GROUP_CHANGED).build());
 
     private final String      nodeId;
     private final JmsTemplate template;
@@ -61,10 +66,8 @@ public class MultiNodeXftUpdateHandlerMethod extends AbstractXftItemEventHandler
     @Autowired
     public MultiNodeXftUpdateHandlerMethod(final XnatAppInfo appInfo, final ConnectionFactory connectionFactory, final Topic distEventsTopic) {
         super(CRITERIA);
-        this.nodeId   = appInfo.getNode().getNodeId();
-        this.template = new JmsTemplate(connectionFactory);
-        this.template.setPubSubDomain(true);
-        this.template.setPubSubNoLocal(true);
+        this.nodeId          = appInfo.getNode().getNodeId();
+        this.template        = new JmsTopicTemplate(connectionFactory);
         this.distEventsTopic = distEventsTopic;
     }
 
@@ -78,14 +81,16 @@ public class MultiNodeXftUpdateHandlerMethod extends AbstractXftItemEventHandler
         log.debug("Handling event action '{}', xsiType '{}' for ID(s) '{}' on node {}", action, xsiType, ids, nodeId);
 
         final String timestamp = DateUtils.getMsTimestamp();
-        template.convertAndSend(distEventsTopic, MultiNodeXftUpdateMessage.builder()
-                                                                          .originatingNodeId(nodeId)
-                                                                          .timestamp(timestamp)
-                                                                          .action(action)
-                                                                          .xsiType(xsiType)
-                                                                          .ids(ids)
-                                                                          .properties(properties)
-                                                                          .build());
+        template.convertAndSend(distEventsTopic,
+                                MultiNodeXftUpdateMessage.builder()
+                                                         .originatingNodeId(nodeId)
+                                                         .timestamp(timestamp)
+                                                         .action(action)
+                                                         .xsiType(xsiType)
+                                                         .ids(ids)
+                                                         .properties(properties)
+                                                         .build(),
+                                POST_PROCESSOR);
         log.debug("{}: sent message with timestamp '{}', action '{}', xsiType '{}' for ID(s) '{}'", nodeId, timestamp, action, xsiType, ids);
         return true;
     }

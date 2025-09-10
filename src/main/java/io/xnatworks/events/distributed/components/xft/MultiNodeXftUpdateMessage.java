@@ -1,7 +1,8 @@
-package io.xnatworks.events.distributed.components;
+package io.xnatworks.events.distributed.components.xft;
 
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
+import io.xnatworks.events.distributed.components.AbstractEventMessage;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.SuperBuilder;

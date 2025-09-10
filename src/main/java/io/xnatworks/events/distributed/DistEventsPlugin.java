@@ -26,10 +26,9 @@ import javax.jms.Topic;
 @XnatPlugin(value = "DistEventsPlugin", name = "Distributed Events Plugin",
             description = "Enables XNAT to propagate events across multiple nodes in a distributed configuration",
             logConfigurationFile = "dist-events-logback.xml", openUrls = "/xapi/dist-events")
-@ComponentScan({"io.xnatworks.events.distributed.api", "io.xnatworks.events.distributed.components", "io.xnatworks.events.distributed.publisher", "io.xnatworks.events.distributed.subscriber"})
+@ComponentScan({"io.xnatworks.events.distributed.api", "io.xnatworks.events.distributed.components"})
 public class DistEventsPlugin {
     public static final String DIST_EVENTS_TOPIC = "dist-events";
-    public static final String DIST_TEST_TOPIC   = "dist-test";
 
     private final ConnectionFactory connectionFactory;
 
@@ -52,10 +51,5 @@ public class DistEventsPlugin {
     @Bean
     public Topic distEventsTopic() throws JMSException {
         return connectionFactory.createConnection().createSession(false, Session.AUTO_ACKNOWLEDGE).createTopic(DIST_EVENTS_TOPIC);
-    }
-
-    @Bean
-    public Topic testTopic() throws JMSException {
-        return connectionFactory.createConnection().createSession(false, Session.AUTO_ACKNOWLEDGE).createTopic(DIST_TEST_TOPIC);
     }
 }
