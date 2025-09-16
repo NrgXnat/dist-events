@@ -1,4 +1,4 @@
-package io.xnatworks.events.distributed.components;
+package io.xnatworks.events.distributed.components.xft;
 
 import io.xnatworks.events.distributed.DistEventsPlugin;
 import lombok.extern.slf4j.Slf4j;
@@ -15,23 +15,22 @@ import org.springframework.jms.annotation.JmsListener;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Component
 @Slf4j
-public class MultiNodeXftUpdateListener {
+public class MultiNodeXftUpdateTopicListener {
     private final GroupsAndPermissionsCache       cache;
     private final List<XftItemEventHandlerMethod> handlers;
     private final String                          nodeId;
 
     @Autowired
-    public MultiNodeXftUpdateListener(final GroupsAndPermissionsCache cache, final List<XftItemEventHandlerMethod> handlers, final XnatAppInfo appInfo) {
+    public MultiNodeXftUpdateTopicListener(final GroupsAndPermissionsCache cache, final List<XftItemEventHandlerMethod> handlers, final XnatAppInfo appInfo) {
         this.cache    = cache;
         this.handlers = handlers;
         this.nodeId   = appInfo.getNode().getNodeId();
     }
 
-    @JmsListener(destination = DistEventsPlugin.DIST_EVENTS_TOPIC, containerFactory = "jmsTopicListenerContainerFactory")
+    @JmsListener(destination = DistEventsPlugin.DIST_EVENTS_TOPIC, selector = "messageClass = 'MultiNodeXftUpdateMessage'", containerFactory = "jmsTopicListenerContainerFactory")
     public void receive(final MultiNodeXftUpdateMessage message) {
         if (StringUtils.equals(nodeId, message.getOriginatingNodeId())) {
             log.info("Received message from this node so basically ignoring it: [{}] action '{}', XSI type '{}', ID(s) '{}'", message.getTimestamp(), message.getAction(), message.getXsiType(), message.getIds());
