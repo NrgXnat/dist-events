@@ -3,6 +3,9 @@
 The XNAT distributed events plugin enables XNAT to propagate events across multiple nodes in a distributed configuration.
 
 ## Version 1.1.0
+[Released Sep 16, 2025](https://bitbucket.org/xnatx/dist-events/src/1.1.0/)
+
+Requires XNAT 1.9.2.2
 
 * **Improvement:** Propagate changes to prefs and config changes across all nodes, invalidating and updating any cached values across all nodes. Requires XNAT 1.9.2.2. 
 
