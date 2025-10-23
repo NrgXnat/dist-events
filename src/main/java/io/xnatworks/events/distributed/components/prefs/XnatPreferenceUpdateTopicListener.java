@@ -3,8 +3,10 @@ package io.xnatworks.events.distributed.components.prefs;
 import io.xnatworks.events.distributed.DistEventsPlugin;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.nrg.framework.services.NrgEventServiceI;
 import org.nrg.prefs.beans.PreferenceBean;
 import org.nrg.prefs.exceptions.InvalidPreferenceName;
+import org.nrg.xdat.preferences.PreferenceEvent;
 import org.nrg.xnat.services.XnatAppInfo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jms.annotation.JmsListener;
@@ -18,11 +20,13 @@ import java.util.stream.Collectors;
 @Component
 @Slf4j
 public class XnatPreferenceUpdateTopicListener {
+    private final NrgEventServiceI                      eventService;
     private final Map<String, ? extends PreferenceBean> preferenceBeans;
     private final String                                nodeId;
 
     @Autowired
-    public XnatPreferenceUpdateTopicListener(final List<? extends PreferenceBean> preferenceBeans, final XnatAppInfo appInfo) {
+    public XnatPreferenceUpdateTopicListener(final NrgEventServiceI eventService, final List<? extends PreferenceBean> preferenceBeans, final XnatAppInfo appInfo) {
+        this.eventService    = eventService;
         this.preferenceBeans = preferenceBeans.stream().collect(Collectors.toMap(PreferenceBean::getToolId, Function.identity()));
         this.nodeId          = appInfo.getNode().getNodeId();
     }
@@ -44,6 +48,7 @@ public class XnatPreferenceUpdateTopicListener {
         }
         try {
             preferenceBean.invalidate(message.getPreference());
+            eventService.triggerEvent(new PreferenceEvent(message.getPreference(), message.getValue()));
         } catch (InvalidPreferenceName e) {
             throw new RuntimeException(e);
         }
