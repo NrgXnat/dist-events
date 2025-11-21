@@ -22,7 +22,11 @@ plugins {
 }
 
 group = "org.nrg.xnatx.plugins"
+<<<<<<< HEAD
 version = "1.2.0"
+=======
+version = "1.3.0-SNAPSHOT"
+>>>>>>> 82533c3 (Update to version 1.3.0-SNAPSHOT and parent version 1.9.3)
 description = "XNAT Distributed Events Plugin"
 
 repositories {
