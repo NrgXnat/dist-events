@@ -2,6 +2,14 @@
 
 The XNAT distributed events plugin enables XNAT to propagate events across multiple nodes in a distributed configuration.
 
+## Version 1.2.0
+[Released Nov 21, 2025](https://bitbucket.org/xnatx/dist-events/src/1.2.0/)
+
+Requires XNAT 1.9.3
+
+* **Improvement:** Propagate changes to SCP Receivers across all nodes. Requires XNAT 1.9.3.
+
+
 ## Version 1.1.0
 [Released Sep 16, 2025](https://bitbucket.org/xnatx/dist-events/src/1.1.0/)
 
