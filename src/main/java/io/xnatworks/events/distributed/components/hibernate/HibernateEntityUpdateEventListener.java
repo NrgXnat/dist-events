@@ -5,6 +5,7 @@ import io.xnatworks.events.distributed.components.DistEventsMessagePostProcessor
 import io.xnatworks.events.distributed.components.JmsTopicTemplate;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.ArrayUtils;
 import org.hibernate.SessionFactory;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
 import org.hibernate.envers.DefaultRevisionEntity;
@@ -164,11 +165,17 @@ public class HibernateEntityUpdateEventListener implements PostInsertEventListen
     private void prepareDicomSCPInstanceUpdate(final PostUpdateEvent event) {
         final List<String> propertyNames   = Arrays.asList(event.getPersister().getPropertyNames());
         final int[]        dirtyProperties = event.getDirtyProperties();
-        final List<String> changed = Arrays.stream(dirtyProperties)
-                                           .mapToObj(propertyNames::get)
-                                           .collect(Collectors.toList());
+        final List<String> changed = ArrayUtils.isNotEmpty(dirtyProperties)
+                                     ? Arrays.stream(dirtyProperties)
+                                             .mapToObj(propertyNames::get)
+                                             .collect(Collectors.toList())
+                                     : Collections.emptyList();
 
-        log.debug("DicomSCPInstance {} updated, changed properties: {}", getEntityId(event.getEntity()), String.join(", ", changed));
+        if (CollectionUtils.isNotEmpty(changed)) {
+            log.debug("DicomSCPInstance {} updated, changed properties: {}", getEntityId(event.getEntity()), String.join(", ", changed));
+        } else {
+            log.debug("DicomSCPInstance {} updated, but no changed properties detected", getEntityId(event.getEntity()));
+        }
 
         // Update messages only require extended info if AE title or port was changed, because other nodes
         // will only be able to get the newly persisted values, not the previous values.
