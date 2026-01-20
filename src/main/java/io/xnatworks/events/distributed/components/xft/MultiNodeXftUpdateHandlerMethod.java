@@ -91,7 +91,7 @@ public class MultiNodeXftUpdateHandlerMethod extends AbstractXftItemEventHandler
                                                          .properties(properties)
                                                          .build(),
                                 POST_PROCESSOR);
-        log.debug("{}: sent message with timestamp '{}', action '{}', xsiType '{}' for ID(s) '{}'", nodeId, timestamp, action, xsiType, ids);
+        log.info("{}: sent message with timestamp '{}', action '{}', xsiType '{}' for ID(s) '{}'", nodeId, timestamp, action, xsiType, ids);
         return true;
     }
 

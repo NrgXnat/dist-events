@@ -20,6 +20,7 @@ import org.hibernate.event.spi.PostUpdateEventListener;
 import org.hibernate.persister.entity.EntityPersister;
 import org.nrg.dcm.scp.DicomSCPInstance;
 import org.nrg.framework.orm.hibernate.BaseHibernateEntity;
+import org.nrg.prefs.entities.Preference;
 import org.nrg.xft.utils.DateUtils;
 import org.nrg.xnat.services.XnatAppInfo;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,7 +51,7 @@ public class HibernateEntityUpdateEventListener implements PostInsertEventListen
     private static final long serialVersionUID = -7757627496623131826L;
 
     private static final DistEventsMessagePostProcessor POST_PROCESSOR         = new DistEventsMessagePostProcessor(HibernateEntityUpdateMessage.class);
-    private static final List<Class<?>>                 IGNORED_ENTITY_CLASSES = Collections.singletonList(DefaultRevisionEntity.class);
+    private static final List<Class<?>>                 IGNORED_ENTITY_CLASSES = Arrays.asList(DefaultRevisionEntity.class, Preference.class);
 
     private final String      nodeId;
     private final JmsTemplate template;
@@ -130,8 +131,8 @@ public class HibernateEntityUpdateEventListener implements PostInsertEventListen
             return;
         }
         final String entityType = entity.getClass().getName();
-        final long   entityId   = getEntityId(entity);
-        if (entityId == -1) {
+        final Number entityId   = getEntityId(entity);
+        if (entityId.longValue() == -1) {
             log.warn("Could not determine entity ID for {} entity of type {}, not sending event", action.getVerb(), entityType);
             return;
         }
@@ -212,12 +213,12 @@ public class HibernateEntityUpdateEventListener implements PostInsertEventListen
         return IGNORED_ENTITY_CLASSES.stream().anyMatch(ignoredClass -> ignoredClass.isAssignableFrom(entity.getClass()));
     }
 
-    private static long getEntityId(final Object entity) {
+    private static Number getEntityId(final Object entity) {
         if (entity instanceof BaseHibernateEntity) {
             return ((BaseHibernateEntity) entity).getId();
         }
         try {
-            return (long) entity.getClass().getMethod("getId").invoke(entity);
+            return (Number) entity.getClass().getMethod("getId").invoke(entity);
         } catch (Exception e) {
             log.error("Could not retrieve entity ID on an instance of type {}", entity.getClass().getName(), e);
             return -1;

@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-
 <configuration>
-  <appender name="dist_events" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <appender name="dist_events" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <append>true</append>
         <file>${xnat.home}/logs/dist-events.log</file>
         <encoder>
@@ -10,8 +9,8 @@
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
             <fileNamePattern>${xnat.home}/logs/dist-events.log.%d{yyyy-MM-dd}</fileNamePattern>
         </rollingPolicy>
-  </appender>
-  <logger name="io.xnatworks.events.distributed" additivity="false" level="WARN">
-     <appender-ref ref="dist_events"/>
- </logger>
+    </appender>
+    <logger name="io.xnatworks.events.distributed" additivity="false" level="WARN">
+        <appender-ref ref="dist_events"/>
+    </logger>
 </configuration>
