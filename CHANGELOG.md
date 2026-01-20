@@ -2,6 +2,15 @@
 
 The XNAT distributed events plugin enables XNAT to propagate events across multiple nodes in a distributed configuration.
 
+## Version 1.2.2
+[Released Jan 21, 2026](https://bitbucket.org/xnatx/dist-events/src/1.2.2/)
+
+Requires XNAT 1.9.3 or higher
+
+* **Bugfix:** Prevent preference change updates from overwhelming the ActiveMQ server
+
+
+
 ## Version 1.2.1
 [Released Nov 26, 2025](https://bitbucket.org/xnatx/dist-events/src/1.2.1/)
 
