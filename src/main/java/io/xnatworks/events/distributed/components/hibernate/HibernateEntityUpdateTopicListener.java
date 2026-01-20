@@ -55,12 +55,13 @@ public class HibernateEntityUpdateTopicListener {
             final Action action = message.getAction();
             builder.action(action.toString());
 
+            final long id = message.getId().longValue();
             switch (action) {
                 case INSERT:
-                    builder.id(message.getId());
+                    builder.id(id);
                     break;
                 case UPDATE:
-                    builder.id(message.getId());
+                    builder.id(id);
                     final String aeTitle = message.getProperties().get(AE_TITLE);
                     if (StringUtils.isNotBlank(aeTitle)) {
                         builder.aeTitle(aeTitle);
@@ -71,7 +72,7 @@ public class HibernateEntityUpdateTopicListener {
                     }
                     break;
                 case DELETE:
-                    builder.id(message.getId())
+                    builder.id(id)
                            .aeTitle(message.getProperties().get(AE_TITLE))
                            .port(Integer.parseInt(message.getProperties().get(PORT)));
                     break;

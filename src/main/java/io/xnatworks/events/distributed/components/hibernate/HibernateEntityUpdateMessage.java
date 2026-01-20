@@ -32,7 +32,7 @@ public class HibernateEntityUpdateMessage extends AbstractEventMessage {
     private final String entityType;
 
     @ApiModelProperty("The ID of the affected entity.")
-    private final long id;
+    private final Number id;
 
     @ApiModelProperty("Any extra properties required for downstream actions.")
     @Singular("property")
