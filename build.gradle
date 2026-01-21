@@ -22,7 +22,7 @@ plugins {
 }
 
 group = "org.nrg.xnatx.plugins"
-version = "1.2.2-RC-SNAPSHOT"
+version = "1.2.2"
 description = "XNAT Distributed Events Plugin"
 
 repositories {
