@@ -6,7 +6,7 @@
  
 buildscript {
     ext {
-        vXnat = "1.10.0-RC-SNAPSHOT"
+        vXnat = "1.10.0-RC4-SNAPSHOT"
     }
 }
 
@@ -74,6 +74,9 @@ dependencies {
         exclude group: "*"
     }
     implementation("org.nrg.xnat:xnat-data-models") {
+        exclude group: "*"
+    }
+    implementation("org.nrg.xnat:spawner") {
         exclude group: "*"
     }
     implementation("org.nrg.xdat:core") {

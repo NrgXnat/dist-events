@@ -5,13 +5,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.hibernate.Cache;
 import org.hibernate.SessionFactory;
+import org.hibernate.event.spi.AbstractEvent;
 import org.nrg.dcm.scp.DicomSCPEvent;
 import org.nrg.framework.services.NrgEventServiceI;
+import org.nrg.xnat.hibernate.listeners.methods.HibernateEntityEventHandlerMethod;
 import org.nrg.xnat.services.XnatAppInfo;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jms.annotation.JmsListener;
 import org.springframework.stereotype.Component;
 
+import javax.persistence.EntityManager;
+import java.lang.reflect.Proxy;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -25,15 +31,19 @@ public class HibernateEntityUpdateTopicListener {
 
     private final Map<String, Class<?>> entityTypes = new ConcurrentHashMap<>();
 
-    private final NrgEventServiceI eventService;
-    private final Cache            cache;
-    private final String           nodeId;
+    private final NrgEventServiceI                        eventService;
+    private final EntityManager                           entityManager;
+    private final Cache                                   cache;
+    private final String                                  nodeId;
+    private final List<HibernateEntityEventHandlerMethod> handlerMethods;
 
     @Autowired
-    public HibernateEntityUpdateTopicListener(final NrgEventServiceI eventService, final SessionFactory sessionFactory, final XnatAppInfo appInfo) {
-        this.eventService = eventService;
-        cache             = sessionFactory.getCache();
-        nodeId            = appInfo.getNode().getNodeId();
+    public HibernateEntityUpdateTopicListener(final NrgEventServiceI eventService, final EntityManager entityManager, final SessionFactory sessionFactory, final XnatAppInfo appInfo, final List<HibernateEntityEventHandlerMethod> handlerMethods) {
+        this.eventService   = eventService;
+        this.entityManager  = entityManager;
+        this.cache          = sessionFactory.getCache();
+        this.nodeId         = appInfo.getNode().getNodeId();
+        this.handlerMethods = handlerMethods;
     }
 
     @JmsListener(destination = DistEventsPlugin.DIST_EVENTS_TOPIC, selector = "messageClass = 'HibernateEntityUpdateMessage'", containerFactory = "jmsTopicListenerContainerFactory")
@@ -44,9 +54,39 @@ public class HibernateEntityUpdateTopicListener {
         }
         log.info("Received message from node {}: [{}] action '{}', entity type '{}', ID '{}'", message.getOriginatingNodeId(), message.getTimestamp(), message.getAction(), message.getEntityType(), message.getId());
 
-        // We don't need to clear the cache for inserts
-        if (message.getAction() != Action.INSERT) {
-            clearEntityCache(message);
+        try {
+            final AbstractEvent event = message.toHibernateEvent(entityManager);
+
+            // We don't need to clear the cache for inserts
+            if (message.getAction() != Action.INSERT) {
+                clearEntityCache(message);
+            }
+
+            handlerMethods.stream().filter(method -> {
+                final boolean matches = method.matches(event);
+                if (log.isDebugEnabled()) {
+                    final Class<?> methodClass;
+                    if (Proxy.isProxyClass(method.getClass())) {
+                        methodClass = AopUtils.getTargetClass(method);
+                    } else {
+                        methodClass = method.getClass();
+                    }
+                    log.debug("Found a handler method of type {} that {}", methodClass, matches ? "matches" : "doesn't match");
+                }
+                return matches;
+            }).forEach(method -> {
+                try {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Found a matching handler method of type {}, calling handleEvent()", method.getClass().getName());
+                    }
+                    method.handleEvent(event);
+                } catch (Exception e) {
+                    log.error("Error handling event for message: [{}] action '{}', entity type '{}', ID '{}'", message.getTimestamp(), message.getAction(), message.getEntityType(), message.getId(), e);
+                }
+            });
+        } catch (ClassNotFoundException e) {
+            log.error("Could not find class for entity type {}, skipping cache eviction and handler methods for this message.", message.getEntityType(), e);
+            return;
         }
 
         if (StringUtils.equals(DICOM_SCP_INSTANCE_CLASS_NAME, message.getEntityType())) {
