@@ -2,17 +2,27 @@ package io.xnatworks.events.distributed.components.xft.methods;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.nrg.framework.exceptions.NotFoundException;
 import org.nrg.framework.exceptions.NrgServiceError;
 import org.nrg.framework.exceptions.NrgServiceRuntimeException;
+import org.nrg.xdat.display.DisplayManager;
+import org.nrg.xdat.display.ElementDisplay;
+import org.nrg.xdat.display.transport.entities.ElementDisplayDB;
 import org.nrg.xdat.display.transport.services.ElementDisplayStorageService;
 import org.nrg.xdat.security.ElementSecurity;
 import org.nrg.xft.event.XftItemEventI;
 import org.nrg.xft.event.methods.AbstractXftItemEventHandlerMethod;
+import org.nrg.xft.schema.XFTElement;
+import org.nrg.xft.schema.XFTManager;
+import org.nrg.xft.schema.XFTSchema;
+import org.nrg.xft.schema.db.entities.DBBackedSchema;
 import org.nrg.xft.schema.db.services.DBBackedSchemaService;
 import org.nrg.xnat.services.LoadDBDataTypeCallable;
 import org.nrg.xnat.services.LoadDBDataTypeResult;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import static org.nrg.xnat.services.CreateDataTypeCallable.SCHEMA_ID;
@@ -62,10 +72,47 @@ public class XdatElementSecurityUpdateHandlerMethod extends AbstractXftItemEvent
         try {
             final LoadDBDataTypeResult result  = new LoadDBDataTypeCallable(schemaId, dbBackedSchemaService, elementDisplayStorageService).call();
             final boolean              success = result.isSuccess();
+            doubleCheckDisplays(schemaId);
             log.info("Handled a new data type {} from schema ID {} and {} loaded the data-type schema for it", dataType, schemaId, success ? SUCCESS : FAILURE);
             return success;
         } catch (Exception e) {
             throw new NrgServiceRuntimeException(NrgServiceError.Unknown, "An unknown error occurred trying to load the data type " + xsiType + " from schema " + schemaId, e);
         }
+    }
+
+    // Bypasses DBBackedSchemaService.getElementNames() because its static cache can be poisoned with
+    // an empty list before this schema is registered in XFTManager. We walk XFTManager directly instead.
+    private void doubleCheckDisplays(final Long schemaId) throws NotFoundException {
+        final DBBackedSchema dbschema     = dbBackedSchemaService.get(schemaId);
+        final List<String>   elementNames = collectElementNamesFromXftManager(dbschema);
+        log.debug("Double-checking display docs for schema {} elements: {}", dbschema.getName(), elementNames);
+
+        for (final String elementName : elementNames) {
+            if (DisplayManager.GetElementDisplay(elementName) != null) {
+                log.debug("ElementDisplay already loaded for: {}", elementName);
+                continue;
+            }
+            final ElementDisplayDB storedDisplay = elementDisplayStorageService.findByElementName(elementName);
+            if (storedDisplay == null) {
+                log.warn("No stored ElementDisplay found for: {}", elementName);
+                continue;
+            }
+            final ElementDisplay ed = elementDisplayStorageService.renderElementDisplay(storedDisplay);
+            DisplayManager.GetInstance().addElement(ed);
+            log.debug("ElementDisplay loaded from storage for: {}", elementName);
+        }
+    }
+
+    private List<String> collectElementNamesFromXftManager(final DBBackedSchema dbschema) {
+        final List<String> names = new ArrayList<>();
+        for (final XFTSchema schema : XFTManager.GetSchemas()) {
+            if (StringUtils.equals(dbschema.getName(), schema.getDataModel().getFileName())) {
+                for (final Object o : schema.getSortedElements()) {
+                    final XFTElement element = (XFTElement) o;
+                    names.add(element.getType().getFullForeignType());
+                }
+            }
+        }
+        return names;
     }
 }
