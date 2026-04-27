@@ -2,6 +2,16 @@
 
 The XNAT distributed events plugin enables XNAT to propagate events across multiple nodes in a distributed configuration.
 
+
+## Version 2.0.0
+[Released Apr 27, 2026](https://bitbucket.org/xnatx/dist-events/src/2.0.0/)
+
+Requires XNAT 1.10.0 or higher
+
+* **Improvement:** Propagate the creation of Dynamic Data Types and CRUD events related to instances of those data types across nodes
+* **Improvement:** Update core code to function on JDK21 for compatibility with XNAT 1.10.0 and higher
+
+
 ## Version 1.2.2
 [Released Jan 21, 2026](https://bitbucket.org/xnatx/dist-events/src/1.2.2/)
 
