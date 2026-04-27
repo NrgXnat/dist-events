@@ -10,6 +10,7 @@ import org.hibernate.SessionFactory;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
 import org.hibernate.envers.DefaultRevisionEntity;
 import org.hibernate.event.service.spi.EventListenerRegistry;
+import org.hibernate.event.spi.AbstractEvent;
 import org.hibernate.event.spi.EventType;
 import org.hibernate.event.spi.PostDeleteEvent;
 import org.hibernate.event.spi.PostDeleteEventListener;
@@ -21,8 +22,12 @@ import org.hibernate.persister.entity.EntityPersister;
 import org.nrg.dcm.scp.DicomSCPInstance;
 import org.nrg.framework.orm.hibernate.BaseHibernateEntity;
 import org.nrg.prefs.entities.Preference;
+import org.nrg.xnat.spawner.entities.SpawnerElement;
 import org.nrg.xft.utils.DateUtils;
+import org.nrg.xnat.hibernate.listeners.methods.HibernateEntityEventHandlerMethod;
+import org.nrg.xnat.node.entities.XnatNodeInfo;
 import org.nrg.xnat.services.XnatAppInfo;
+import org.nrg.xnat.task.entities.XnatTaskInfo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.stereotype.Component;
@@ -31,6 +36,7 @@ import javax.jms.ConnectionFactory;
 import javax.jms.Topic;
 import javax.persistence.Entity;
 
+import java.io.Serial;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -48,20 +54,23 @@ import static io.xnatworks.events.distributed.components.hibernate.HibernateEnti
 @Component
 @Slf4j
 public class HibernateEntityUpdateEventListener implements PostInsertEventListener, PostUpdateEventListener, PostDeleteEventListener {
+    @Serial
     private static final long serialVersionUID = -7757627496623131826L;
 
     private static final DistEventsMessagePostProcessor POST_PROCESSOR         = new DistEventsMessagePostProcessor(HibernateEntityUpdateMessage.class);
-    private static final List<Class<?>>                 IGNORED_ENTITY_CLASSES = Arrays.asList(DefaultRevisionEntity.class, Preference.class);
+    private static final List<Class<?>>                 IGNORED_ENTITY_CLASSES = Arrays.asList(DefaultRevisionEntity.class, Preference.class, SpawnerElement.class, XnatNodeInfo.class, XnatTaskInfo.class);
 
-    private final String      nodeId;
-    private final JmsTemplate template;
-    private final Topic       distEventsTopic;
+    private final String                                  nodeId;
+    private final JmsTemplate                             template;
+    private final Topic                                   distEventsTopic;
+    private final List<HibernateEntityEventHandlerMethod> handlerMethods;
 
     @Autowired
-    public HibernateEntityUpdateEventListener(final XnatAppInfo appInfo, final ConnectionFactory connectionFactory, final SessionFactory sessionFactory, final Topic distEventsTopic) {
+    public HibernateEntityUpdateEventListener(final XnatAppInfo appInfo, final ConnectionFactory connectionFactory, final SessionFactory sessionFactory, final Topic distEventsTopic, final List<HibernateEntityEventHandlerMethod> handlerMethods) {
         this.nodeId          = appInfo.getNode().getNodeId();
         this.template        = new JmsTopicTemplate(connectionFactory);
         this.distEventsTopic = distEventsTopic;
+        this.handlerMethods  = handlerMethods;
 
         if (sessionFactory instanceof SessionFactoryImplementor) {
             final EventListenerRegistry registry = ((SessionFactoryImplementor) sessionFactory).getServiceRegistry().getService(EventListenerRegistry.class);
@@ -82,7 +91,7 @@ public class HibernateEntityUpdateEventListener implements PostInsertEventListen
         if (entity instanceof DicomSCPInstance) {
             prepareDicomSCPInstanceInsert(event);
         } else {
-            sendMessage(entity, INSERT);
+            sendMessage(event);
         }
     }
 
@@ -95,7 +104,7 @@ public class HibernateEntityUpdateEventListener implements PostInsertEventListen
         if (entity instanceof DicomSCPInstance) {
             prepareDicomSCPInstanceUpdate(event);
         } else {
-            sendMessage(entity, UPDATE);
+            sendMessage(event);
         }
     }
 
@@ -108,7 +117,7 @@ public class HibernateEntityUpdateEventListener implements PostInsertEventListen
         if (entity instanceof DicomSCPInstance) {
             prepareDicomSCPInstanceDelete(event);
         } else {
-            sendMessage(entity, DELETE);
+            sendMessage(event);
         }
     }
 
@@ -117,11 +126,28 @@ public class HibernateEntityUpdateEventListener implements PostInsertEventListen
         return false;
     }
 
-    private void sendMessage(final Object entity, final Action action) {
-        sendMessage(entity, action, Collections.emptyMap());
+    private void sendMessage(final AbstractEvent event) {
+        sendMessage(event, Collections.emptyMap());
     }
 
-    private void sendMessage(final Object entity, final Action action, final Map<String, String> properties) {
+    private void sendMessage(final AbstractEvent event, final Map<String, String> properties) {
+        final Object entity;
+        final Action action;
+        switch (event) {
+            case final PostInsertEvent insertEvent -> {
+                entity = insertEvent.getEntity();
+                action = INSERT;
+            }
+            case final PostUpdateEvent updateEvent -> {
+                entity = updateEvent.getEntity();
+                action = UPDATE;
+            }
+            case final PostDeleteEvent deleteEvent -> {
+                entity = deleteEvent.getEntity();
+                action = DELETE;
+            }
+            default -> throw new IllegalArgumentException("Expected a PostInsertEvent, PostUpdateEvent, or PostDeleteEvent, but got a " + event.getClass().getName());
+        }
         if (!isEntityClass(entity)) {
             log.info("Got object that is not a Hibernate entity, not propagating: {}", entity.getClass().getName());
             return;
@@ -137,9 +163,10 @@ public class HibernateEntityUpdateEventListener implements PostInsertEventListen
             return;
         }
 
-        final boolean isDicomSCPInstance = entity instanceof DicomSCPInstance;
-        if (action == INSERT && !isDicomSCPInstance) {
-            log.debug("Not sending insert event for entity of type {} with ID {}: not a DicomSCPInstance", entity.getClass().getName(), entityId);
+        if (action == INSERT &&
+            !(entity instanceof DicomSCPInstance) &&
+            handlerMethods.stream().noneMatch(method -> method.matches(event))) {
+            log.debug("Not sending insert event for entity of type {} with ID {}: not a DicomSCPInstance and no handler methods found", entity.getClass().getName(), entityId);
             return;
         }
 
@@ -156,11 +183,11 @@ public class HibernateEntityUpdateEventListener implements PostInsertEventListen
     }
 
     private void prepareDicomSCPInstanceInsert(final PostInsertEvent event) {
-        sendMessage(event.getEntity(), INSERT, ImmutableMap.<String, String>builder()
-                                                           .put(AE_TITLE, ((DicomSCPInstance) event.getEntity()).getAeTitle())
-                                                           .put(ENABLED, getEnabledState(event.getEntity()))
-                                                           .put(PORT, Integer.toString(((DicomSCPInstance) event.getEntity()).getPort()))
-                                                           .build());
+        sendMessage(event, ImmutableMap.<String, String>builder()
+                                       .put(AE_TITLE, ((DicomSCPInstance) event.getEntity()).getAeTitle())
+                                       .put(ENABLED, getEnabledState(event.getEntity()))
+                                       .put(PORT, Integer.toString(((DicomSCPInstance) event.getEntity()).getPort()))
+                                       .build());
     }
 
     private void prepareDicomSCPInstanceUpdate(final PostUpdateEvent event) {
@@ -191,17 +218,17 @@ public class HibernateEntityUpdateEventListener implements PostInsertEventListen
             if (changed.contains(PORT)) {
                 properties.put(PORT, Integer.toString((int) event.getOldState()[propertyNames.indexOf(PORT)]));
             }
-            sendMessage(event.getEntity(), UPDATE, properties.build());
+            sendMessage(event, properties.build());
         } else {
-            sendMessage(event.getEntity(), UPDATE);
+            sendMessage(event);
         }
     }
 
     private void prepareDicomSCPInstanceDelete(final PostDeleteEvent event) {
-        sendMessage(event.getEntity(), DELETE, ImmutableMap.<String, String>builder()
-                                                           .put(AE_TITLE, ((DicomSCPInstance) event.getEntity()).getAeTitle())
-                                                           .put(PORT, String.valueOf(((DicomSCPInstance) event.getEntity()).getPort()))
-                                                           .build());
+        sendMessage(event, ImmutableMap.<String, String>builder()
+                                       .put(AE_TITLE, ((DicomSCPInstance) event.getEntity()).getAeTitle())
+                                       .put(PORT, String.valueOf(((DicomSCPInstance) event.getEntity()).getPort()))
+                                       .build());
 
     }
 

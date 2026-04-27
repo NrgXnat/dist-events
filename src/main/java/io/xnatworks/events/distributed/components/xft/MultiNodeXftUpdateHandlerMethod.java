@@ -4,6 +4,8 @@ import io.xnatworks.events.distributed.components.DistEventsMessagePostProcessor
 import io.xnatworks.events.distributed.components.JmsTopicTemplate;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.math.NumberUtils;
+import org.nrg.xdat.om.XdatElementSecurity;
 import org.nrg.xdat.om.XdatUser;
 import org.nrg.xdat.om.XdatUsergroup;
 import org.nrg.xdat.om.XnatExperimentdata;
@@ -17,6 +19,7 @@ import org.nrg.xft.event.methods.XftItemEventCriteria;
 import org.nrg.xft.exception.ElementNotFoundException;
 import org.nrg.xft.exception.FieldNotFoundException;
 import org.nrg.xft.exception.XFTInitException;
+import org.nrg.xft.schema.db.entities.DBBackedSchema;
 import org.nrg.xft.utils.DateUtils;
 import org.nrg.xnat.services.XnatAppInfo;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,20 +47,25 @@ import static org.nrg.xdat.security.helpers.Roles.OPERATION_ADD_ROLES;
 import static org.nrg.xdat.security.helpers.Roles.OPERATION_DELETE_ROLE;
 import static org.nrg.xdat.security.helpers.Roles.OPERATION_DELETE_ROLES;
 import static org.nrg.xdat.security.helpers.Roles.OPERATION_MODIFIED_ROLES;
+import static org.nrg.xnat.services.CreateDataTypeCallable.SCHEMA_ID;
 
 @Component
 @Slf4j
 public class MultiNodeXftUpdateHandlerMethod extends AbstractXftItemEventHandlerMethod {
     public static final Predicate<XftItemEventI> PREDICATE_ROLES_CHANGED = event -> event.getProperties().containsKey(OPERATION) && StringUtils.equalsAny(event.getProperties().get(OPERATION).toString(), ADDED_ROLES, DELETED_ROLES, OPERATION_ADD_ROLE, OPERATION_ADD_ROLES, OPERATION_DELETE_ROLE, OPERATION_DELETE_ROLES, OPERATION_MODIFIED_ROLES);
     public static final Predicate<XftItemEventI> PREDICATE_GROUP_CHANGED = event -> event.getProperties().containsKey(OPERATION) && StringUtils.equalsAny(event.getProperties().get(OPERATION).toString(), OPERATION_ADD_USERS, OPERATION_REMOVE_USERS);
+    public static final Predicate<XftItemEventI> PREDICATE_NEW_DATA_TYPE = event -> event.getProperties().containsKey(SCHEMA_ID) && NumberUtils.isCreatable(event.getProperties().get(SCHEMA_ID).toString());
+
+    public static final XftItemEventCriteria CRITERIA_PROJECT_OPERATIONS    = XftItemEventCriteria.builder().xsiType(XnatProjectdata.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.DELETE).build();
+    public static final XftItemEventCriteria CRITERIA_SUBJECT_OPERATIONS    = XftItemEventCriteria.builder().xsiType(XnatSubjectdata.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.DELETE, XftItemEvent.MOVE, XftItemEvent.SHARE).build();
+    public static final XftItemEventCriteria CRITERIA_EXPERIMENT_OPERATIONS = XftItemEventCriteria.builder().xsiType(XnatExperimentdata.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.DELETE, XftItemEvent.MOVE, XftItemEvent.SHARE).build();
+    public static final XftItemEventCriteria CRITERIA_SUBJECT_ROLES_CHANGED = XftItemEventCriteria.builder().xsiType(XdatUser.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.UPDATE).predicate(PREDICATE_ROLES_CHANGED).build();
+    public static final XftItemEventCriteria CRITERIA_USERGROUP_CHANGED     = XftItemEventCriteria.builder().xsiType(XdatUsergroup.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.UPDATE).predicate(PREDICATE_GROUP_CHANGED).build();
+    public static final XftItemEventCriteria CRITERIA_DATA_TYPE_CREATED     = XftItemEventCriteria.builder().xsiType(XdatElementSecurity.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE).predicate(PREDICATE_NEW_DATA_TYPE).build();
 
     private static final DistEventsMessagePostProcessor POST_PROCESSOR = new DistEventsMessagePostProcessor(MultiNodeXftUpdateMessage.class);
 
-    private static final List<XftItemEventCriteria> CRITERIA = Arrays.asList(XftItemEventCriteria.builder().xsiType(XnatProjectdata.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.DELETE).build(),
-                                                                             XftItemEventCriteria.builder().xsiType(XnatSubjectdata.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.DELETE, XftItemEvent.MOVE, XftItemEvent.SHARE).build(),
-                                                                             XftItemEventCriteria.builder().xsiType(XnatExperimentdata.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.DELETE, XftItemEvent.MOVE, XftItemEvent.SHARE).build(),
-                                                                             XftItemEventCriteria.builder().xsiType(XdatUser.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.UPDATE).predicate(PREDICATE_ROLES_CHANGED).build(),
-                                                                             XftItemEventCriteria.builder().xsiType(XdatUsergroup.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.UPDATE).predicate(PREDICATE_GROUP_CHANGED).build());
+    private static final List<XftItemEventCriteria> CRITERIA = List.of(CRITERIA_PROJECT_OPERATIONS, CRITERIA_SUBJECT_OPERATIONS, CRITERIA_EXPERIMENT_OPERATIONS, CRITERIA_SUBJECT_ROLES_CHANGED, CRITERIA_USERGROUP_CHANGED, CRITERIA_DATA_TYPE_CREATED);
 
     private final String      nodeId;
     private final JmsTemplate template;
