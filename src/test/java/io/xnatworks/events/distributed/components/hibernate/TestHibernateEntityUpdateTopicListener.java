@@ -5,6 +5,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.hibernate.SessionFactory;
 import org.hibernate.cfg.AvailableSettings;
 import org.hibernate.dialect.PostgreSQL10Dialect;
+import org.hibernate.event.spi.AbstractEvent;
 import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -32,6 +33,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -96,8 +98,8 @@ class TestHibernateEntityUpdateTopicListener {
      */
     @Test
     void releasesEachLoadedEntityWithItsSession() {
-        final List<Integer>                ids      = createEntities(50);
-        final RecordingUpdateHandlerMethod handler  = new RecordingUpdateHandlerMethod();
+        final List<Integer>                      ids      = createEntities(50);
+        final RecordingHandlerMethod             handler  = updateHandler();
         final HibernateEntityUpdateTopicListener listener = listener(handler);
         getStatistics().clear();
 
@@ -113,15 +115,15 @@ class TestHibernateEntityUpdateTopicListener {
      */
     @Test
     void loadsEntitiesWithLargeObjectColumns() {
-        final Integer                      id      = createEntities(1).getFirst();
-        final RecordingUpdateHandlerMethod handler = new RecordingUpdateHandlerMethod();
+        final Integer                id      = createEntities(1).getFirst();
+        final RecordingHandlerMethod handler = updateHandler();
         getStatistics().clear();
 
         listener(handler).receive(updateFromOtherNode(id));
 
         assertEquals(1, getStatistics().getEntityLoadCount());
         assertEquals(1, handler.getEntities().size());
-        assertEquals("payload-0", handler.getEntities().getFirst().getPayload());
+        assertEquals("payload-0", handler.getLastEntity().getPayload());
     }
 
     /**
@@ -131,7 +133,7 @@ class TestHibernateEntityUpdateTopicListener {
     @Test
     void recoversWhenTheDatabaseClosesItsConnections() throws SQLException {
         final List<Integer>                      ids      = createEntities(3);
-        final RecordingUpdateHandlerMethod       handler  = new RecordingUpdateHandlerMethod();
+        final RecordingHandlerMethod             handler  = updateHandler();
         final HibernateEntityUpdateTopicListener listener = listener(handler);
 
         listener.receive(updateFromOtherNode(ids.get(0)));
@@ -141,21 +143,21 @@ class TestHibernateEntityUpdateTopicListener {
         listener.receive(updateFromOtherNode(ids.get(1)));
         listener.receive(updateFromOtherNode(ids.get(2)));
 
-        assertEquals(ids.get(2), handler.getEntities().getLast().getId());
+        assertEquals(ids.get(2), handler.getLastEntity().getId());
     }
 
     @Test
     void leavesNoCachedCopyOfTheEntityItLoads() {
         final Integer id = createEntities(1).getFirst();
 
-        listener(new RecordingUpdateHandlerMethod()).receive(updateFromOtherNode(id));
+        listener(updateHandler()).receive(updateFromOtherNode(id));
 
         assertFalse(sessionFactory.getCache().containsEntity(LargeObjectEntity.class, id));
     }
 
     @Test
     void skipsHandlersWhenTheEntityIsGone() {
-        final RecordingUpdateHandlerMethod handler = new RecordingUpdateHandlerMethod();
+        final RecordingHandlerMethod handler = updateHandler();
 
         listener(handler).receive(updateFromOtherNode(Integer.MAX_VALUE));
 
@@ -181,7 +183,7 @@ class TestHibernateEntityUpdateTopicListener {
     void evictsTheCachedEntityEvenWhenLoadingItFails() {
         final Integer id = createEntities(1).getFirst();
         cache(id);
-        final RecordingUpdateHandlerMethod handler = new RecordingUpdateHandlerMethod();
+        final RecordingHandlerMethod handler = updateHandler();
 
         new HibernateEntityUpdateTopicListener(mock(NrgEventServiceI.class), sessionFactory, new UnavailableTransactionManager(), THIS_NODE, List.of(handler)).receive(updateFromOtherNode(id));
 
@@ -190,11 +192,37 @@ class TestHibernateEntityUpdateTopicListener {
     }
 
     @Test
+    void handlesDeletesWithoutTheDatabase() {
+        final Integer                id      = createEntities(1).getFirst();
+        final RecordingHandlerMethod handler = new RecordingHandlerMethod(HibernateEntityEventHandlerMethod.Action.DELETE);
+        getStatistics().clear();
+
+        listener(handler).receive(fromOtherNode(Action.DELETE, id));
+
+        // LargeObjectEntity has no setId(), so the placeholder is the class name
+        assertEquals(List.of(LargeObjectEntity.class.getName()), handler.getEntities());
+        assertEquals(0, getStatistics().getSessionOpenCount());
+    }
+
+    @Test
+    void survivesAHandlerFailure() {
+        final Integer                id      = createEntities(1).getFirst();
+        final RecordingHandlerMethod failing = new RecordingHandlerMethod(HibernateEntityEventHandlerMethod.Action.UPDATE) {
+            @Override
+            public boolean matches(final AbstractEvent event) {
+                throw new IllegalStateException("Handler failure");
+            }
+        };
+
+        assertDoesNotThrow(() -> listener(failing).receive(updateFromOtherNode(id)));
+    }
+
+    @Test
     void ignoresMessagesFromThisNode() {
         final Integer id = createEntities(1).getFirst();
         cache(id);
 
-        listener(new RecordingUpdateHandlerMethod()).receive(HibernateEntityUpdateMessage.builder()
+        listener(updateHandler()).receive(HibernateEntityUpdateMessage.builder()
                                                                                          .originatingNodeId(THIS_NODE)
                                                                                          .timestamp("0")
                                                                                          .action(Action.UPDATE)
@@ -209,11 +237,19 @@ class TestHibernateEntityUpdateTopicListener {
         return new HibernateEntityUpdateTopicListener(mock(NrgEventServiceI.class), sessionFactory, transactionManager, THIS_NODE, Arrays.asList(handlers));
     }
 
+    private static RecordingHandlerMethod updateHandler() {
+        return new RecordingHandlerMethod(HibernateEntityEventHandlerMethod.Action.UPDATE);
+    }
+
     private static HibernateEntityUpdateMessage updateFromOtherNode(final Integer id) {
+        return fromOtherNode(Action.UPDATE, id);
+    }
+
+    private static HibernateEntityUpdateMessage fromOtherNode(final Action action, final Integer id) {
         return HibernateEntityUpdateMessage.builder()
                                            .originatingNodeId(OTHER_NODE)
                                            .timestamp("0")
-                                           .action(Action.UPDATE)
+                                           .action(action)
                                            .entityType(LargeObjectEntity.class.getName())
                                            .id(id)
                                            .build();

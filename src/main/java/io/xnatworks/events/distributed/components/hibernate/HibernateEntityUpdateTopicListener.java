@@ -17,9 +17,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import javax.persistence.CacheRetrieveMode;
+import javax.persistence.CacheStoreMode;
 import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -29,9 +32,11 @@ import static io.xnatworks.events.distributed.components.hibernate.HibernateEnti
 @Component
 @Slf4j
 public class HibernateEntityUpdateTopicListener {
-    private static final String DICOM_SCP_INSTANCE_CLASS_NAME = "org.nrg.dcm.scp.DicomSCPInstance";
+    private static final String              DICOM_SCP_INSTANCE_CLASS_NAME = "org.nrg.dcm.scp.DicomSCPInstance";
+    private static final Map<String, Object> BYPASS_CACHE                  = Map.of("javax.persistence.cache.retrieveMode", CacheRetrieveMode.BYPASS,
+                                                                                    "javax.persistence.cache.storeMode", CacheStoreMode.BYPASS);
 
-    private final Map<String, Class<?>> entityTypes = new ConcurrentHashMap<>();
+    private final Map<String, Optional<Class<?>>> entityTypes = new ConcurrentHashMap<>();
 
     private final NrgEventServiceI                        eventService;
     private final SessionFactory                          sessionFactory;
@@ -75,7 +80,12 @@ public class HibernateEntityUpdateTopicListener {
             cache.evictEntityData(entityType, message.getId());
         }
 
-        handleEvent(message, entityType);
+        // A failure here mustn't stop the DICOM SCP propagation below
+        try {
+            handleEvent(message, entityType);
+        } catch (Exception e) {
+            log.error("Error handling event for message: [{}] action '{}', entity type '{}', ID '{}'", message.getTimestamp(), message.getAction(), message.getEntityType(), message.getId(), e);
+        }
 
         if (StringUtils.equals(DICOM_SCP_INSTANCE_CLASS_NAME, message.getEntityType())) {
             final DicomSCPEvent.DicomSCPEventBuilder<?, ?> builder = DicomSCPEvent.builder();
@@ -168,13 +178,14 @@ public class HibernateEntityUpdateTopicListener {
     /**
      * Loads the entity in its own read-only transaction, so its session, database connection and the entity itself
      * are released before the next message. The transaction also lets PostgreSQL read large-object columns, which
-     * it refuses in auto-commit mode.
+     * it refuses in auto-commit mode. The load bypasses the second-level cache: the other node sends this message
+     * before its transaction commits, so caching what this reads could keep the entity as it was before the change.
      *
      * @return The entity, or null if it couldn't be loaded or no longer exists
      */
     private Object loadEntity(final HibernateEntityUpdateMessage message, final Class<?> entityType) {
         try {
-            final Object entity = readOnlyTransaction.execute(status -> sessionFactory.getCurrentSession().find(entityType, message.getId()));
+            final Object entity = readOnlyTransaction.execute(status -> sessionFactory.getCurrentSession().find(entityType, message.getId(), BYPASS_CACHE));
             if (entity == null) {
                 log.warn("Entity of type {} with ID {} not found, not calling handler methods for message [{}] action '{}'", entityType.getName(), message.getId(), message.getTimestamp(), message.getAction());
             }
@@ -182,21 +193,21 @@ public class HibernateEntityUpdateTopicListener {
         } catch (Exception e) {
             log.error("Could not load entity for message: [{}] action '{}', entity type '{}', ID '{}'", message.getTimestamp(), message.getAction(), message.getEntityType(), message.getId(), e);
             return null;
-        } finally {
-            // The other node sends this message before its transaction commits, so the load can cache the entity as
-            // it was before the change
-            cache.evictEntityData(entityType, message.getId());
         }
     }
 
+    /**
+     * Resolves the entity class, remembering types this node can't load (say, from a plugin installed only on the
+     * other node) so each one is logged once rather than on every message.
+     */
     private Class<?> getEntityType(final String entityType) {
         return entityTypes.computeIfAbsent(entityType, key -> {
             try {
-                return Class.forName(key);
+                return Optional.of(Class.forName(key));
             } catch (ClassNotFoundException e) {
-                log.error("Could not find class for entity type {}, skipping cache eviction and handler methods for this message.", key, e);
-                return null;
+                log.error("Could not find class for entity type {}, skipping cache eviction and handler methods for messages about it.", key);
+                return Optional.empty();
             }
-        });
+        }).orElse(null);
     }
 }
