@@ -52,8 +52,8 @@ public class HibernateEntityUpdateMessage extends AbstractEventMessage {
      * Builds the Hibernate event for this message.
      *
      * @param entityClass The resolved class for {@link #getEntityType()}
-     * @param entity      The inserted or updated entity, as loaded on this node. Ignored for deletes, which carry a
-     *                    placeholder because the entity is gone.
+     * @param entity      The inserted or updated entity as loaded on this node, or its class name standing in for it.
+     *                    Ignored for deletes, which carry a placeholder because the entity is gone.
      *
      * @return The event for the message's action
      */

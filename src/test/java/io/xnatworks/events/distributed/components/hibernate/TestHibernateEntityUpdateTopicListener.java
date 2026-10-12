@@ -17,15 +17,12 @@ import org.springframework.orm.hibernate5.HibernateTransactionManager;
 import org.springframework.orm.hibernate5.LocalSessionFactoryBuilder;
 import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
@@ -37,7 +34,9 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Runs the listener against PostgreSQL with XNAT's Hibernate setup: a Spring-built session factory, HikariCP and a
@@ -152,7 +151,7 @@ class TestHibernateEntityUpdateTopicListener {
 
         listener(updateHandler()).receive(updateFromOtherNode(id));
 
-        assertFalse(sessionFactory.getCache().containsEntity(LargeObjectEntity.class, id));
+        assertFalse(isCached(id));
     }
 
     @Test
@@ -172,7 +171,7 @@ class TestHibernateEntityUpdateTopicListener {
 
         listener().receive(updateFromOtherNode(id));
 
-        assertFalse(sessionFactory.getCache().containsEntity(LargeObjectEntity.class, id));
+        assertFalse(isCached(id));
         assertEquals(0, getStatistics().getSessionOpenCount());
     }
 
@@ -183,11 +182,13 @@ class TestHibernateEntityUpdateTopicListener {
     void evictsTheCachedEntityEvenWhenLoadingItFails() {
         final Integer id = createEntities(1).getFirst();
         cache(id);
-        final RecordingHandlerMethod handler = updateHandler();
+        final RecordingHandlerMethod     handler     = updateHandler();
+        final PlatformTransactionManager unavailable = mock(PlatformTransactionManager.class);
+        when(unavailable.getTransaction(any())).thenThrow(new CannotCreateTransactionException("Database unavailable"));
 
-        new HibernateEntityUpdateTopicListener(mock(NrgEventServiceI.class), sessionFactory, new UnavailableTransactionManager(), THIS_NODE, List.of(handler)).receive(updateFromOtherNode(id));
+        listener(unavailable, handler).receive(updateFromOtherNode(id));
 
-        assertFalse(sessionFactory.getCache().containsEntity(LargeObjectEntity.class, id));
+        assertFalse(isCached(id));
         assertTrue(handler.getEntities().isEmpty());
     }
 
@@ -222,18 +223,16 @@ class TestHibernateEntityUpdateTopicListener {
         final Integer id = createEntities(1).getFirst();
         cache(id);
 
-        listener(updateHandler()).receive(HibernateEntityUpdateMessage.builder()
-                                                                                         .originatingNodeId(THIS_NODE)
-                                                                                         .timestamp("0")
-                                                                                         .action(Action.UPDATE)
-                                                                                         .entityType(LargeObjectEntity.class.getName())
-                                                                                         .id(id)
-                                                                                         .build());
+        listener(updateHandler()).receive(fromNode(THIS_NODE, Action.UPDATE, id));
 
-        assertTrue(sessionFactory.getCache().containsEntity(LargeObjectEntity.class, id));
+        assertTrue(isCached(id));
     }
 
     private static HibernateEntityUpdateTopicListener listener(final HibernateEntityEventHandlerMethod... handlers) {
+        return listener(transactionManager, handlers);
+    }
+
+    private static HibernateEntityUpdateTopicListener listener(final PlatformTransactionManager transactionManager, final HibernateEntityEventHandlerMethod... handlers) {
         return new HibernateEntityUpdateTopicListener(mock(NrgEventServiceI.class), sessionFactory, transactionManager, THIS_NODE, Arrays.asList(handlers));
     }
 
@@ -246,8 +245,12 @@ class TestHibernateEntityUpdateTopicListener {
     }
 
     private static HibernateEntityUpdateMessage fromOtherNode(final Action action, final Integer id) {
+        return fromNode(OTHER_NODE, action, id);
+    }
+
+    private static HibernateEntityUpdateMessage fromNode(final String nodeId, final Action action, final Integer id) {
         return HibernateEntityUpdateMessage.builder()
-                                           .originatingNodeId(OTHER_NODE)
+                                           .originatingNodeId(nodeId)
                                            .timestamp("0")
                                            .action(action)
                                            .entityType(LargeObjectEntity.class.getName())
@@ -267,11 +270,15 @@ class TestHibernateEntityUpdateTopicListener {
 
     private static void cache(final Integer id) {
         transaction.executeWithoutResult(status -> sessionFactory.getCurrentSession().get(LargeObjectEntity.class, id));
-        assertTrue(sessionFactory.getCache().containsEntity(LargeObjectEntity.class, id));
+        assertTrue(isCached(id));
+    }
+
+    private static boolean isCached(final Integer id) {
+        return sessionFactory.getCache().containsEntity(LargeObjectEntity.class, id);
     }
 
     private static void terminateOtherConnections() throws SQLException {
-        try (final Connection connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        try (final Connection connection = POSTGRES.createConnection("");
              final Statement statement = connection.createStatement()) {
             statement.execute("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()");
         }
@@ -279,22 +286,5 @@ class TestHibernateEntityUpdateTopicListener {
 
     private static Statistics getStatistics() {
         return sessionFactory.getStatistics();
-    }
-
-    private static class UnavailableTransactionManager implements PlatformTransactionManager {
-        @Override
-        public TransactionStatus getTransaction(final TransactionDefinition definition) {
-            throw new CannotCreateTransactionException("Database unavailable");
-        }
-
-        @Override
-        public void commit(final TransactionStatus status) {
-            throw new IllegalStateException("No transaction to commit");
-        }
-
-        @Override
-        public void rollback(final TransactionStatus status) {
-            throw new IllegalStateException("No transaction to roll back");
-        }
     }
 }

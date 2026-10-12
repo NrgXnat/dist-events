@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.hibernate.Cache;
 import org.hibernate.SessionFactory;
+import org.hibernate.cfg.AvailableSettings;
 import org.hibernate.event.spi.AbstractEvent;
 import org.nrg.dcm.scp.DicomSCPEvent;
 import org.nrg.framework.services.NrgEventServiceI;
@@ -19,7 +20,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.persistence.CacheRetrieveMode;
 import javax.persistence.CacheStoreMode;
-import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,8 +33,8 @@ import static io.xnatworks.events.distributed.components.hibernate.HibernateEnti
 @Slf4j
 public class HibernateEntityUpdateTopicListener {
     private static final String              DICOM_SCP_INSTANCE_CLASS_NAME = "org.nrg.dcm.scp.DicomSCPInstance";
-    private static final Map<String, Object> BYPASS_CACHE                  = Map.of("javax.persistence.cache.retrieveMode", CacheRetrieveMode.BYPASS,
-                                                                                    "javax.persistence.cache.storeMode", CacheStoreMode.BYPASS);
+    private static final Map<String, Object> BYPASS_CACHE                  = Map.of(AvailableSettings.JPA_SHARED_CACHE_RETRIEVE_MODE, CacheRetrieveMode.BYPASS,
+                                                                                    AvailableSettings.JPA_SHARED_CACHE_STORE_MODE, CacheStoreMode.BYPASS);
 
     private final Map<String, Optional<Class<?>>> entityTypes = new ConcurrentHashMap<>();
 
@@ -126,41 +126,34 @@ public class HibernateEntityUpdateTopicListener {
     }
 
     /**
-     * Calls the handler methods for the message's action and entity type. The entity is only loaded when at least one
-     * handler method declares that action and type, so handler methods get a detached entity.
+     * Calls the handler methods that match the message. The entity is only loaded once a handler method matches the
+     * event with the class name standing in for the entity, as deletes already do, so most messages never touch the
+     * database and handler methods get a detached entity.
      */
     private void handleEvent(final HibernateEntityUpdateMessage message, final Class<?> entityType) {
-        final HibernateEntityEventHandlerMethod.Action action = HibernateEntityEventHandlerMethod.Action.valueOf(message.getAction().name());
-        final List<HibernateEntityEventHandlerMethod> candidates = handlerMethods.stream()
-                                                                                 .filter(method -> method.getHandledActions().contains(action) && method.getHandledEntityClasses().stream().anyMatch(handled -> handled.isAssignableFrom(entityType)))
-                                                                                 .collect(Collectors.toList());
+        final AbstractEvent                           placeholder = message.toHibernateEvent(entityType, entityType.getName());
+        final List<HibernateEntityEventHandlerMethod> candidates  = handlerMethods.stream().filter(method -> method.matches(placeholder)).collect(Collectors.toList());
         if (candidates.isEmpty()) {
-            log.debug("No handler methods for {} of entity type {}, not loading entity {}", action, entityType.getName(), message.getId());
+            log.debug("No handler methods for {} of entity type {}, not loading entity {}", message.getAction(), entityType.getName(), message.getId());
             return;
         }
 
-        // Deletes carry a placeholder, so only inserts and updates need the entity
-        final Object entity;
+        // Deletes carry their placeholder, so only inserts and updates need the entity
+        final AbstractEvent event;
         if (message.getAction() == Action.DELETE) {
-            entity = null;
+            event = placeholder;
         } else {
-            entity = loadEntity(message, entityType);
+            final Object entity = loadEntity(message, entityType);
             if (entity == null) {
                 return;
             }
+            event = message.toHibernateEvent(entityType, entity);
         }
-        final AbstractEvent event = message.toHibernateEvent(entityType, entity);
 
         candidates.stream().filter(method -> {
             final boolean matches = method.matches(event);
             if (log.isDebugEnabled()) {
-                final Class<?> methodClass;
-                if (Proxy.isProxyClass(method.getClass())) {
-                    methodClass = AopUtils.getTargetClass(method);
-                } else {
-                    methodClass = method.getClass();
-                }
-                log.debug("Found a handler method of type {} that {}", methodClass, matches ? "matches" : "doesn't match");
+                log.debug("Found a handler method of type {} that {}", AopUtils.getTargetClass(method), matches ? "matches" : "doesn't match");
             }
             return matches;
         }).forEach(method -> {
@@ -181,19 +174,14 @@ public class HibernateEntityUpdateTopicListener {
      * it refuses in auto-commit mode. The load bypasses the second-level cache: the other node sends this message
      * before its transaction commits, so caching what this reads could keep the entity as it was before the change.
      *
-     * @return The entity, or null if it couldn't be loaded or no longer exists
+     * @return The entity, or null if it no longer exists
      */
     private Object loadEntity(final HibernateEntityUpdateMessage message, final Class<?> entityType) {
-        try {
-            final Object entity = readOnlyTransaction.execute(status -> sessionFactory.getCurrentSession().find(entityType, message.getId(), BYPASS_CACHE));
-            if (entity == null) {
-                log.warn("Entity of type {} with ID {} not found, not calling handler methods for message [{}] action '{}'", entityType.getName(), message.getId(), message.getTimestamp(), message.getAction());
-            }
-            return entity;
-        } catch (Exception e) {
-            log.error("Could not load entity for message: [{}] action '{}', entity type '{}', ID '{}'", message.getTimestamp(), message.getAction(), message.getEntityType(), message.getId(), e);
-            return null;
+        final Object entity = readOnlyTransaction.execute(status -> sessionFactory.getCurrentSession().find(entityType, message.getId(), BYPASS_CACHE));
+        if (entity == null) {
+            log.warn("Entity of type {} with ID {} not found, not calling handler methods for message [{}] action '{}'", entityType.getName(), message.getId(), message.getTimestamp(), message.getAction());
         }
+        return entity;
     }
 
     /**
