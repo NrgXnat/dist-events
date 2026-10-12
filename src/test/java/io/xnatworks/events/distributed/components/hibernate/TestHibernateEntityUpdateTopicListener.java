@@ -40,9 +40,9 @@ import static org.mockito.Mockito.mock;
 /**
  * Runs the listener against PostgreSQL with XNAT's Hibernate setup: a Spring-built session factory, HikariCP and a
  * JCache second-level cache. Each test covers one way the listener failed when it loaded entities through a single
- * long-lived session with no transaction.
+ * long-lived session with no transaction. Skipped where Docker isn't available.
  */
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class TestHibernateEntityUpdateTopicListener {
     private static final String THIS_NODE  = "node-b";
     private static final String OTHER_NODE = "node-a";
@@ -61,7 +61,8 @@ class TestHibernateEntityUpdateTopicListener {
         config.setJdbcUrl(POSTGRES.getJdbcUrl());
         config.setUsername(POSTGRES.getUsername());
         config.setPassword(POSTGRES.getPassword());
-        config.setMaximumPoolSize(4);
+        // One connection, so recoversWhenTheDatabaseClosesItsConnections knows which connection the pool hands out
+        config.setMaximumPoolSize(1);
         dataSource = new HikariDataSource(config);
 
         final LocalSessionFactoryBuilder builder = new LocalSessionFactoryBuilder(dataSource);
@@ -128,18 +129,37 @@ class TestHibernateEntityUpdateTopicListener {
      * failed until a restart.
      */
     @Test
-    void recoversWhenTheDatabaseClosesItsConnections() throws Exception {
-        final List<Integer>                      ids      = createEntities(2);
+    void recoversWhenTheDatabaseClosesItsConnections() throws SQLException {
+        final List<Integer>                      ids      = createEntities(3);
         final RecordingUpdateHandlerMethod       handler  = new RecordingUpdateHandlerMethod();
         final HibernateEntityUpdateTopicListener listener = listener(handler);
 
         listener.receive(updateFromOtherNode(ids.get(0)));
         terminateOtherConnections();
-        // Past HikariCP's 500 ms window, so the pool validates a connection before handing it out
-        Thread.sleep(1000);
+        // Whether this one fails on the closed connection depends on whether the pool checks it before handing it
+        // out. Either way the pool replaces it, so the next message loads.
         listener.receive(updateFromOtherNode(ids.get(1)));
+        listener.receive(updateFromOtherNode(ids.get(2)));
 
-        assertEquals(2, handler.getEntities().size());
+        assertEquals(ids.get(2), handler.getEntities().getLast().getId());
+    }
+
+    @Test
+    void leavesNoCachedCopyOfTheEntityItLoads() {
+        final Integer id = createEntities(1).getFirst();
+
+        listener(new RecordingUpdateHandlerMethod()).receive(updateFromOtherNode(id));
+
+        assertFalse(sessionFactory.getCache().containsEntity(LargeObjectEntity.class, id));
+    }
+
+    @Test
+    void skipsHandlersWhenTheEntityIsGone() {
+        final RecordingUpdateHandlerMethod handler = new RecordingUpdateHandlerMethod();
+
+        listener(handler).receive(updateFromOtherNode(Integer.MAX_VALUE));
+
+        assertTrue(handler.getEntities().isEmpty());
     }
 
     @Test

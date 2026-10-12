@@ -14,7 +14,6 @@ import org.hibernate.event.spi.PostDeleteEvent;
 import org.hibernate.event.spi.PostInsertEvent;
 import org.hibernate.event.spi.PostUpdateEvent;
 
-import javax.persistence.EntityManager;
 import java.io.Serial;
 import java.util.List;
 import java.util.Map;
@@ -50,27 +49,21 @@ public class HibernateEntityUpdateMessage extends AbstractEventMessage {
     private final Map<String, String> properties;
 
     /**
-     * Builds the Hibernate event for this message. Inserts and updates load the entity with the given entity
-     * manager, which should belong to a short-lived transaction: a long-lived one keeps every entity it loads.
+     * Builds the Hibernate event for this message.
      *
-     * @param entityManager The entity manager to load the entity with
-     * @param entityClass   The resolved class for {@link #getEntityType()}
+     * @param entityClass The resolved class for {@link #getEntityType()}
+     * @param entity      The inserted or updated entity, as loaded on this node. Ignored for deletes, which carry a
+     *                    placeholder because the entity is gone.
      *
      * @return The event for the message's action
      */
-    public AbstractEvent toHibernateEvent(final EntityManager entityManager, final Class<?> entityClass) {
+    public AbstractEvent toHibernateEvent(final Class<?> entityClass, final Object entity) {
         return switch (action) {
-            case INSERT -> new PostInsertEvent(getEntity(entityManager, entityClass), id, null, null, null);
-            case UPDATE -> new PostUpdateEvent(getEntity(entityManager, entityClass), id, null, null, null, null, null);
+            case INSERT -> new PostInsertEvent(entity, id, null, null, null);
+            case UPDATE -> new PostUpdateEvent(entity, id, null, null, null, null, null);
             // We can't retrieve the deleted entity, so put a placeholder entity in there.
             case DELETE -> new PostDeleteEvent(getPlaceholder(entityClass), id, null, null, null);
         };
-    }
-
-    private Object getEntity(final EntityManager entityManager, final Class<?> entityClass) {
-        final Object entity = entityManager.find(entityClass, id);
-        log.debug("Searched for entity of type {} and ID {}, got this: {}", entityClass, id, entity);
-        return entity;
     }
 
     private Object getPlaceholder(final Class<?> entityClass) {

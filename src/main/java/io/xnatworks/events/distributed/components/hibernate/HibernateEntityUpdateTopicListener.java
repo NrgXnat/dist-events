@@ -68,8 +68,8 @@ public class HibernateEntityUpdateTopicListener {
             return;
         }
 
-        // Evict first, so this node reads the changed entity from the database even if handling the event fails.
-        // We don't need to clear the cache for inserts.
+        // Evict before anything can fail, and so a handler gets the entity from the database rather than this
+        // node's cached copy. We don't need to clear the cache for inserts.
         if (message.getAction() != Action.INSERT) {
             log.debug("Evicting cache for entity type {} and ID {}", entityType, message.getId());
             cache.evictEntityData(entityType, message.getId());
@@ -117,9 +117,7 @@ public class HibernateEntityUpdateTopicListener {
 
     /**
      * Calls the handler methods for the message's action and entity type. The entity is only loaded when at least one
-     * handler method declares that action and type, and then inside its own read-only transaction, so its session,
-     * database connection and the loaded entity are all released before the next message. Loading inside a
-     * transaction also lets entities with large-object columns load, which PostgreSQL refuses in auto-commit mode.
+     * handler method declares that action and type, so handler methods get a detached entity.
      */
     private void handleEvent(final HibernateEntityUpdateMessage message, final Class<?> entityType) {
         final HibernateEntityEventHandlerMethod.Action action = HibernateEntityEventHandlerMethod.Action.valueOf(message.getAction().name());
@@ -131,13 +129,17 @@ public class HibernateEntityUpdateTopicListener {
             return;
         }
 
-        final AbstractEvent event;
-        try {
-            event = readOnlyTransaction.execute(status -> message.toHibernateEvent(sessionFactory.getCurrentSession(), entityType));
-        } catch (Exception e) {
-            log.error("Could not load entity for message: [{}] action '{}', entity type '{}', ID '{}'", message.getTimestamp(), message.getAction(), message.getEntityType(), message.getId(), e);
-            return;
+        // Deletes carry a placeholder, so only inserts and updates need the entity
+        final Object entity;
+        if (message.getAction() == Action.DELETE) {
+            entity = null;
+        } else {
+            entity = loadEntity(message, entityType);
+            if (entity == null) {
+                return;
+            }
         }
+        final AbstractEvent event = message.toHibernateEvent(entityType, entity);
 
         candidates.stream().filter(method -> {
             final boolean matches = method.matches(event);
@@ -161,6 +163,30 @@ public class HibernateEntityUpdateTopicListener {
                 log.error("Error handling event for message: [{}] action '{}', entity type '{}', ID '{}'", message.getTimestamp(), message.getAction(), message.getEntityType(), message.getId(), e);
             }
         });
+    }
+
+    /**
+     * Loads the entity in its own read-only transaction, so its session, database connection and the entity itself
+     * are released before the next message. The transaction also lets PostgreSQL read large-object columns, which
+     * it refuses in auto-commit mode.
+     *
+     * @return The entity, or null if it couldn't be loaded or no longer exists
+     */
+    private Object loadEntity(final HibernateEntityUpdateMessage message, final Class<?> entityType) {
+        try {
+            final Object entity = readOnlyTransaction.execute(status -> sessionFactory.getCurrentSession().find(entityType, message.getId()));
+            if (entity == null) {
+                log.warn("Entity of type {} with ID {} not found, not calling handler methods for message [{}] action '{}'", entityType.getName(), message.getId(), message.getTimestamp(), message.getAction());
+            }
+            return entity;
+        } catch (Exception e) {
+            log.error("Could not load entity for message: [{}] action '{}', entity type '{}', ID '{}'", message.getTimestamp(), message.getAction(), message.getEntityType(), message.getId(), e);
+            return null;
+        } finally {
+            // The other node sends this message before its transaction commits, so the load can cache the entity as
+            // it was before the change
+            cache.evictEntityData(entityType, message.getId());
+        }
     }
 
     private Class<?> getEntityType(final String entityType) {
