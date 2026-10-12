@@ -49,28 +49,31 @@ public class HibernateEntityUpdateMessage extends AbstractEventMessage {
     @Singular("property")
     private final Map<String, String> properties;
 
-    public AbstractEvent toHibernateEvent(final EntityManager entityManager) throws ClassNotFoundException {
+    /**
+     * Builds the Hibernate event for this message. Inserts and updates load the entity with the given entity
+     * manager, which should belong to a short-lived transaction: a long-lived one keeps every entity it loads.
+     *
+     * @param entityManager The entity manager to load the entity with
+     * @param entityClass   The resolved class for {@link #getEntityType()}
+     *
+     * @return The event for the message's action
+     */
+    public AbstractEvent toHibernateEvent(final EntityManager entityManager, final Class<?> entityClass) {
         return switch (action) {
-            case INSERT -> new PostInsertEvent(getEntity(entityManager), id, null, null, null);
-            case UPDATE -> new PostUpdateEvent(getEntity(entityManager), id, null, null, null, null, null);
+            case INSERT -> new PostInsertEvent(getEntity(entityManager, entityClass), id, null, null, null);
+            case UPDATE -> new PostUpdateEvent(getEntity(entityManager, entityClass), id, null, null, null, null, null);
             // We can't retrieve the deleted entity, so put a placeholder entity in there.
-            case DELETE -> new PostDeleteEvent(getPlaceholder(entityType, id), id, null, null, null);
+            case DELETE -> new PostDeleteEvent(getPlaceholder(entityClass), id, null, null, null);
         };
     }
 
-    private Object getEntity(final EntityManager entityManager) throws ClassNotFoundException {
-        final Class<?> entityClass = getEntityClass();
-        final Object   entity      = entityManager.find(entityClass, id);
+    private Object getEntity(final EntityManager entityManager, final Class<?> entityClass) {
+        final Object entity = entityManager.find(entityClass, id);
         log.debug("Searched for entity of type {} and ID {}, got this: {}", entityClass, id, entity);
         return entity;
     }
 
-    private Class<?> getEntityClass() throws ClassNotFoundException {
-        return Class.forName(entityType);
-    }
-
-    private Object getPlaceholder(final String entityType, final Number id) throws ClassNotFoundException {
-        final Class<?> entityClass = getEntityClass();
+    private Object getPlaceholder(final Class<?> entityClass) {
         try {
             final Object placeholder = entityClass.getConstructor().newInstance();
             entityClass.getMethod("setId", id.getClass()).invoke(placeholder, id);
