@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   cut-rc:
-    uses: NrgXnat/xnat-ci-workflows/.github/workflows/gradle-release-cut-rc.yml@v1
+    uses: NrgXnat/xnat-ci-workflows/.github/workflows/gradle-release-cut-rc.yml@v2
     with:
       next_dev_version: ${{ inputs.next_dev_version }}
       source_branch:    ${{ inputs.source_branch }}
