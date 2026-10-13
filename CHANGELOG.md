@@ -3,6 +3,14 @@
 The XNAT distributed events plugin enables XNAT to propagate events across multiple nodes in a distributed configuration.
 
 
+## Version 2.0.1
+Not yet released
+
+Requires XNAT 1.10.0 or higher
+
+* **Bugfix:** Stop the Hibernate update listener from keeping every entity changed on other nodes. It loaded them into one Hibernate session that lasted as long as the application, with no transaction, so a node's heap filled until it ran out of memory. Every message failed with "Connection is closed" once the database closed that session's connection. Entities with large-object columns always failed on PostgreSQL with "Large Objects may not be used in auto-commit mode". The listener now evicts the node's cached copy first, and loads the entity only when a handler method needs it, in a short-lived read-only transaction. Handler methods now receive a detached entity.
+
+
 ## Version 2.0.0
 [Released Apr 27, 2026](https://bitbucket.org/xnatx/dist-events/src/2.0.0/)
 
