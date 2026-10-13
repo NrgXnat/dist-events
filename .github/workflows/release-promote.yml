@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   promote:
-    uses: NrgXnat/xnat-ci-workflows/.github/workflows/gradle-release-promote.yml@v1
+    uses: NrgXnat/xnat-ci-workflows/.github/workflows/gradle-release-promote.yml@v2
     with:
       rc_branch:     ${{ inputs.rc_branch }}
       target_main:   ${{ inputs.target_main }}

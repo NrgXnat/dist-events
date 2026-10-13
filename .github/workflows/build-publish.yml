@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   build-publish:
-    uses: NrgXnat/xnat-ci-workflows/.github/workflows/gradle-build-publish.yml@v1
+    uses: NrgXnat/xnat-ci-workflows/.github/workflows/gradle-build-publish.yml@v2
     with:
       # ──── Artifact ────
       artifact-glob: 'build/libs/*.jar'
