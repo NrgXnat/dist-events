@@ -1,10 +1,11 @@
-The XNAT Distributed Events plugin is written and maintained by XNAT Works,
-Inc. It is made available for general use under the 2-clause or Simplified BSD
-license:
+The XNAT Distributed Events plugin is written and maintained by the 
+Neuroinformatics Research Group at the Washington University School of 
+Medicine. It is made available for general use under the 2-clause or 
+Simplified BSD license:
 
 ==============================================================================
 
-Copyright (c) 2025, XNAT Works, Inc.
+Copyright (c) 2025, Washington University School of Medicine
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -30,3 +31,4 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 The views and conclusions contained in the software and documentation are those
 of the authors and should not be interpreted as representing official policies,
 either expressed or implied, of the FreeBSD Project.
+

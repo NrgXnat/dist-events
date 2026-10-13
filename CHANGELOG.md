@@ -3,6 +3,14 @@
 The XNAT distributed events plugin enables XNAT to propagate events across multiple nodes in a distributed configuration.
 
 
+## Version 2.0.1
+[Released Oct 13, 2026](https://github.com/NrgXnat/dist-events/tree/2.0.1)
+
+Requires XNAT 1.10.0 or higher
+
+* **Bugfix:** Fix memory growth, "Connection is closed" errors, and PostgreSQL large-object failures in the Hibernate update listener ([#3](https://github.com/NrgXnat/dist-events/pull/3))
+
+
 ## Version 2.0.0
 [Released Apr 27, 2026](https://bitbucket.org/xnatx/dist-events/src/2.0.0/)
 
