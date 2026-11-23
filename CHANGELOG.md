@@ -8,7 +8,7 @@ Unreleased
 
 Requires XNAT 1.10.0 or higher
 
-* **Bugfix:** Forward the event that adds a new project's creator to its owner group, so other nodes let the creator read the project's data
+* **Bugfix:** Forward the event that adds a new project's creator to its owner group, so other nodes let the creator read the project's data ([#8](https://github.com/NrgXnat/dist-events/pull/8))
 
 
 ## Version 2.0.1
