@@ -3,6 +3,14 @@
 The XNAT distributed events plugin enables XNAT to propagate events across multiple nodes in a distributed configuration.
 
 
+## Version 2.0.2
+Unreleased
+
+Requires XNAT 1.10.0 or higher
+
+* **Bugfix:** Forward the event that adds a new project's creator to its owner group, so other nodes let the creator read the project's data
+
+
 ## Version 2.0.1
 [Released Oct 13, 2026](https://github.com/NrgXnat/dist-events/tree/2.0.1)
 

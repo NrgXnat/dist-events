@@ -60,7 +60,9 @@ public class MultiNodeXftUpdateHandlerMethod extends AbstractXftItemEventHandler
     public static final XftItemEventCriteria CRITERIA_SUBJECT_OPERATIONS    = XftItemEventCriteria.builder().xsiType(XnatSubjectdata.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.DELETE, XftItemEvent.MOVE, XftItemEvent.SHARE).build();
     public static final XftItemEventCriteria CRITERIA_EXPERIMENT_OPERATIONS = XftItemEventCriteria.builder().xsiType(XnatExperimentdata.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.DELETE, XftItemEvent.MOVE, XftItemEvent.SHARE).build();
     public static final XftItemEventCriteria CRITERIA_SUBJECT_ROLES_CHANGED = XftItemEventCriteria.builder().xsiType(XdatUser.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.UPDATE).predicate(PREDICATE_ROLES_CHANGED).build();
-    public static final XftItemEventCriteria CRITERIA_USERGROUP_CHANGED     = XftItemEventCriteria.builder().xsiType(XdatUsergroup.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.UPDATE).predicate(PREDICATE_GROUP_CHANGED).build();
+    // XNAT announces the members a new group starts with (such as a new project's creator in its owner group) as a
+    // CREATE with operation addUsers, and later membership changes as an UPDATE. Other nodes need both.
+    public static final XftItemEventCriteria CRITERIA_USERGROUP_CHANGED     = XftItemEventCriteria.builder().xsiType(XdatUsergroup.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE, XftItemEvent.UPDATE).predicate(PREDICATE_GROUP_CHANGED).build();
     public static final XftItemEventCriteria CRITERIA_DATA_TYPE_CREATED     = XftItemEventCriteria.builder().xsiType(XdatElementSecurity.SCHEMA_ELEMENT_NAME).actions(XftItemEvent.CREATE).predicate(PREDICATE_NEW_DATA_TYPE).build();
 
     private static final DistEventsMessagePostProcessor POST_PROCESSOR = new DistEventsMessagePostProcessor(MultiNodeXftUpdateMessage.class);
